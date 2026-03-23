@@ -15,7 +15,7 @@ export default function OnboardingScreen() {
         </View>
 
         <Text style={styles.title}>
-          Battle<Text style={styles.textNeon}>PASS</Text>
+          Street<Text style={styles.textNeon}>PASS</Text>
         </Text>
         
         <Text style={styles.subtitle}>
@@ -26,7 +26,7 @@ export default function OnboardingScreen() {
       <View style={styles.footer}>
         <TouchableOpacity 
           style={styles.buttonPrimary}
-          onPress={() => router.push('/auth/resgister')}
+          onPress={() => router.push('/auth/register')}
         >
           <Text style={styles.buttonPrimaryText}>COMEÇAR AGORA</Text>
         </TouchableOpacity>

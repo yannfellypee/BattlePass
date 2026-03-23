@@ -1,39 +1,23 @@
-import React, { useContext, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  TextInput, 
-  StyleSheet, 
-  TouchableOpacity, 
-  KeyboardAvoidingView, 
-  Platform, 
-  ActivityIndicator, 
-  Alert 
-} from 'react-native';
+import React from 'react';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 
-// Imports dos teus serviços e contexto
-import { login } from "../../src/Services/authService";
-import { AuthContext } from "../../src/context/AuthContext";
-
-// --- 1. ESQUEMA DE VALIDAÇÃO (ZOD) ---
+// 1. ZOD: O Esquema de Validação do Login
 const loginSchema = z.object({
   email: z.string().email('Introduza um e-mail válido'),
-  password: z.string().min(6, 'A senha deve ter no mínimo 6 caracteres'),
+  password: z.string().min(6, 'A palavra-passe deve ter no mínimo 6 caracteres'),
 });
 
 type LoginData = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn } = useContext(AuthContext);
-  const [isLoading, setIsLoading] = useState(false);
 
-  // --- 2. CONFIGURAÇÃO DO FORMULÁRIO ---
+  // 2. REACT HOOK FORM: O Motor do Formulário
   const { control, handleSubmit, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -42,42 +26,11 @@ export default function LoginScreen() {
     }
   });
 
-  // --- 3. LÓGICA DE SUBMISSÃO ---
+  // 3. FUNÇÃO DE ENVIO: Só executa se o e-mail e a senha passarem pelo Zod
   const onSubmit = (data: LoginData) => {
-    setIsLoading(true);
-
-    // Simulação de delay para feedback visual
-    setTimeout(() => {
-      // Chama o serviço que busca no mockUsers.ts
-      const user = login(data.email, data.password);
-
-      if (!user) {
-        setIsLoading(false);
-        Alert.alert(
-          "Acesso Negado", 
-          "Usuário não encontrado ou senha incorreta. Verifique os dados e tente novamente."
-        );
-        return;
-      }
-
-      // Se o usuário existe, salva no Contexto Global
-      signIn({
-        name: user.name,
-        type: user.role, // 'mc', 'organizer' ou 'audience'
-      });
-
-      setIsLoading(false);
-
-      // REDIRECIONAMENTO DINÂMICO
-      // Usamos 'as any' para evitar avisos de tipagem do router enquanto o cache atualiza
-      if (user.role === 'mc') {
-        router.replace('/mc' as any);
-      } else if (user.role === 'organizer') {
-        router.replace('/organizer' as any);
-      } else {
-        router.replace('/audience' as any);
-      }
-    }, 1500);
+    console.log("Dados prontos para autenticar no Supabase:", data);
+    // Simulação de login: Joga para a Home (Feed)
+    router.replace('/(tabs)/feed');
   };
 
   return (
@@ -85,12 +38,10 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      {/* Botão Voltar */}
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={28} color="#FFF" />
       </TouchableOpacity>
 
-      {/* Cabeçalho */}
       <View style={styles.header}>
         <Text style={styles.title}>ENTRAR NA <Text style={styles.textNeon}>RODA</Text></Text>
         <Text style={styles.subtitle}>Acesse o seu BattlePass para continuar.</Text>
@@ -103,14 +54,9 @@ export default function LoginScreen() {
           control={control}
           name="email"
           render={({ field: { onChange, onBlur, value } }) => (
-            <View style={styles.inputGroup}>
+            <View>
               <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-                <Ionicons 
-                  name="mail-outline" 
-                  size={20} 
-                  color={errors.email ? "#FF3333" : "#888"} 
-                  style={styles.icon} 
-                />
+                <Ionicons name="mail-outline" size={20} color={errors.email ? "#FF3333" : "#888"} style={styles.icon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="E-mail" 
@@ -132,14 +78,9 @@ export default function LoginScreen() {
           control={control}
           name="password"
           render={({ field: { onChange, onBlur, value } }) => (
-            <View style={styles.inputGroup}>
+            <View>
               <View style={[styles.inputContainer, errors.password && styles.inputError]}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={errors.password ? "#FF3333" : "#888"} 
-                  style={styles.icon} 
-                />
+                <Ionicons name="lock-closed-outline" size={20} color={errors.password ? "#FF3333" : "#888"} style={styles.icon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Senha" 
@@ -159,24 +100,16 @@ export default function LoginScreen() {
           <Text style={styles.forgotPasswordText}>Esqueci minha senha</Text>
         </TouchableOpacity>
 
-        {/* Botão de Entrar */}
-        <TouchableOpacity 
-          style={styles.buttonPrimary} 
-          onPress={handleSubmit(onSubmit)}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.buttonPrimaryText}>ENTRAR</Text>
-          )}
+        {/* Botão conectado ao handleSubmit */}
+        <TouchableOpacity style={styles.buttonPrimary} onPress={handleSubmit(onSubmit)}>
+          <Text style={styles.buttonPrimaryText}>ENTRAR</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Rodapé */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Ainda não tem o passaporte?</Text>
-        <TouchableOpacity onPress={() => router.push('/auth/register')}>
+        {/* Ajustado o caminho para garantir que vai para a tela certa */}
+        <TouchableOpacity onPress={() => router.push('/auth/resgister')}>
           <Text style={styles.footerLink}> Crie sua conta</Text>
         </TouchableOpacity>
       </View>
@@ -192,7 +125,7 @@ const styles = StyleSheet.create({
   textNeon: { color: '#39FF14' },
   subtitle: { color: '#888', fontSize: 16, marginTop: 10 },
   form: { flex: 1 },
-  inputGroup: { marginBottom: 15 },
+  
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -200,25 +133,29 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#333',
+    marginBottom: 10,
     paddingHorizontal: 15,
     height: 60,
   },
   icon: { marginRight: 10 },
   input: { flex: 1, color: '#FFF', fontSize: 16 },
-  inputError: { borderColor: '#FF3333' },
-  errorText: { color: '#FF3333', fontSize: 12, marginTop: 5, marginLeft: 5 },
-  forgotPassword: { alignItems: 'flex-end', marginBottom: 30 },
+  
+  // Estilos de Erro
+  inputError: { borderColor: '#FF3333', borderWidth: 1 },
+  errorText: { color: '#FF3333', fontSize: 12, marginBottom: 15, marginLeft: 5, marginTop: -5 },
+
+  forgotPassword: { alignItems: 'flex-end', marginBottom: 30, marginTop: 5 },
   forgotPasswordText: { color: '#888', fontSize: 14 },
+  
   buttonPrimary: {
     backgroundColor: '#39FF14',
     paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
-    height: 60,
-    justifyContent: 'center'
   },
   buttonPrimaryText: { color: '#000', fontSize: 16, fontWeight: '900' },
-  footer: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 40, marginTop: 20 },
+  
+  footer: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 40 },
   footerText: { color: '#888', fontSize: 14 },
   footerLink: { color: '#39FF14', fontSize: 14, fontWeight: 'bold' },
 });
