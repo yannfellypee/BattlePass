@@ -1,27 +1,74 @@
-import { mockUsers, User } from '../Services/mockUsers';
+import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-/**
- * Procura um usuário no mockUsers que coincida com e-mail e senha.
- * Retorna o objeto User se encontrado, ou null se não existir.
- */
-import { mockUsers, User } from './mockUsers';
-
-export const login = (email: string, password: string): User | null => {
-  const user = mockUsers.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-  );
-  return user || null;
-};
-export const login = (email: string, password: string): User | null => {
-  // .find() percorre o array e retorna o primeiro item que satisfaz a condição
-  const user = mockUsers.find(
-    (u) => 
-      u.email.toLowerCase() === email.toLowerCase() && 
-      u.password === password
-  );
-
-  // Se o find não encontrar nada, ele retorna undefined. 
-  // Forçamos o retorno de null para facilitar a verificação no frontend.
-  return user || null;
+export type User = {
+  name: string;
+  type: 'mc' | 'organizer' | 'audience';
 };
 
+interface AuthContextData {
+  user: User | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  isLoggingOut: boolean; // Novo estado para o loading de saída
+  signIn: (userData: User) => Promise<void>;
+  signOut: () => Promise<void>;
+}
+
+export const AuthContext = createContext<AuthContextData>({} as AuthContextData);
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    async function loadStorageData() {
+      try {
+        const storageUser = await AsyncStorage.getItem('@BattlePass:user');
+        if (storageUser) {
+          setUser(JSON.parse(storageUser));
+        }
+      } catch (error) {
+        console.error("Erro ao recuperar sessão:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadStorageData();
+  }, []);
+
+  const signIn = async (userData: User) => {
+    setUser(userData);
+    await AsyncStorage.setItem('@BattlePass:user', JSON.stringify(userData));
+  };
+
+  const signOut = async () => {
+    setIsLoggingOut(true);
+
+    // Timer de 5 segundos conforme solicitado
+    setTimeout(async () => {
+      try {
+        await AsyncStorage.removeItem('@BattlePass:user');
+        setUser(null);
+      } catch (error) {
+        console.error("Erro ao deslogar:", error);
+      } finally {
+        setIsLoggingOut(false);
+      }
+    }, 5000);
+  };
+
+  return (
+    <AuthContext.Provider value={{ 
+      user, 
+      isAuthenticated: !!user, 
+      isLoading, 
+      isLoggingOut,
+      signIn, 
+      signOut 
+    }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};

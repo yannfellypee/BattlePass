@@ -1,6 +1,6 @@
 import React, { useContext } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { AuthContext } from '../../src/context/AuthContext';
+import { AuthContext } from '../../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AudienceScreen() {

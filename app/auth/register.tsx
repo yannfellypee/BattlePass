@@ -40,6 +40,10 @@ export default function RegisterScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // --- NOVOS ESTADOS PARA VISIBILIDADE DAS SENHAS ---
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
+
   const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -55,35 +59,25 @@ export default function RegisterScreen() {
 
   const selectedRole = watch('role');
 
-  // --- 2. LÓGICA DE ENVIO ---
   const onSubmit = async (data: RegisterData) => {
     setIsSubmitting(true);
-
-    // Limpeza do documento (remove pontos, traços, etc)
     const rawDocument = data.document.replace(/\D/g, '');
 
-    // Preparação dos dados para o banco
     const dadosParaOBanco = {
       nome_usuario: data.name,
       nome_completo: data.role === 'MC' ? data.fullName : data.name,
       email: data.email,
       password: data.password,
       role: data.role.toLowerCase(),
-      documento_numero: rawDocument, // Aqui está o número puro
-      tipo_documento: rawDocument.length > 11 ? 'CNPJ' : 'CPF' // Identificação do tipo
+      documento_numero: rawDocument,
+      tipo_documento: rawDocument.length > 11 ? 'CNPJ' : 'CPF'
     };
 
-    // Log detalhado conforme solicitado
-    console.log("-----------------------------------------");
-    console.log("DADOS VALIDADOS PRONTOS PARA O BANCO:");
-    console.log(JSON.stringify(dadosParaOBanco, null, 2));
-    console.log("-----------------------------------------");
+    console.log("DADOS PRONTOS:", JSON.stringify(dadosParaOBanco, null, 2));
 
-    // Fluxo Visual: 5 segundos de Spinner -> Mensagem de Sucesso -> Redirecionamento
     setTimeout(() => {
       setIsSubmitting(false);
       setShowSuccess(true);
-
       setTimeout(() => {
         router.replace('/auth/login');
       }, 2000);
@@ -114,7 +108,7 @@ export default function RegisterScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={80} color="#39FF14" />
-                <Text style={styles.successTitle}>Conta criada com Sucesso!</Text>
+                <Text style={styles.successTitle}>Conta criada!</Text>
                 <Text style={styles.feedbackText}>Redirecionando para o login...</Text>
               </>
             )}
@@ -143,124 +137,82 @@ export default function RegisterScreen() {
 
             <Text style={styles.sectionTitle}>OS TEUS DADOS</Text>
 
+            {/* Inputs de texto (Nome, Documento, Email) mantidos conforme original */}
             {selectedRole === 'MC' && (
               <View style={styles.inputGroup}>
-                <Controller
-                  control={control}
-                  name="fullName"
-                  render={({ field: { onChange, value } }) => (
-                    <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
-                      <TextInput 
-                        style={styles.input} 
-                        placeholder="Nome Completo (Identidade)" 
-                        placeholderTextColor="#666" 
-                        onChangeText={onChange} 
-                        value={value} 
-                      />
-                    </View>
-                  )}
-                />
+                <Controller control={control} name="fullName" render={({ field: { onChange, value } }) => (
+                  <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
+                    <TextInput style={styles.input} placeholder="Nome Completo" placeholderTextColor="#666" onChangeText={onChange} value={value} />
+                  </View>
+                )} />
                 {errors.fullName && <Text style={styles.errorText}>{errors.fullName.message}</Text>}
               </View>
             )}
 
             <View style={styles.inputGroup}>
-              <Controller
-                control={control}
-                name="name"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder={selectedRole === 'MC' ? "Nome Artístico (Vulgo)" : "Nome de Usuário"} 
-                      placeholderTextColor="#666" 
-                      onChangeText={onChange} 
-                      value={value} 
-                    />
-                  </View>
-                )}
-              />
+              <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
+                <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
+                  <TextInput style={styles.input} placeholder={selectedRole === 'MC' ? "Vulgo (Nome Artístico)" : "Nome de Usuário"} placeholderTextColor="#666" onChangeText={onChange} value={value} />
+                </View>
+              )} />
               {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
             </View>
 
             <View style={styles.inputGroup}>
-              <Controller
-                control={control}
-                name="document"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.document && styles.inputError]}>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder={selectedRole === 'Organizer' ? "CPF ou CNPJ" : "CPF"} 
-                      placeholderTextColor="#666" 
-                      keyboardType="numeric" 
-                      onChangeText={onChange} 
-                      value={value} 
-                    />
-                  </View>
-                )}
-              />
+              <Controller control={control} name="document" render={({ field: { onChange, value } }) => (
+                <View style={[styles.inputWrapper, errors.document && styles.inputError]}>
+                  <TextInput style={styles.input} placeholder="CPF/CNPJ" placeholderTextColor="#666" keyboardType="numeric" onChangeText={onChange} value={value} />
+                </View>
+              )} />
               {errors.document && <Text style={styles.errorText}>{errors.document.message}</Text>}
             </View>
 
             <View style={styles.inputGroup}>
-              <Controller
-                control={control}
-                name="email"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="E-mail" 
-                      placeholderTextColor="#666" 
-                      keyboardType="email-address" 
-                      autoCapitalize="none" 
-                      onChangeText={onChange} 
-                      value={value} 
-                    />
-                  </View>
-                )}
-              />
+              <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
+                <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
+                  <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor="#666" keyboardType="email-address" autoCapitalize="none" onChangeText={onChange} value={value} />
+                </View>
+              )} />
               {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
             </View>
 
+            {/* CAMPO SENHA COM OLHO */}
             <View style={styles.inputGroup}>
-              <Controller
-                control={control}
-                name="password"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.password && styles.inputError]}>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Senha" 
-                      placeholderTextColor="#666" 
-                      secureTextEntry 
-                      onChangeText={onChange} 
-                      value={value} 
-                    />
-                  </View>
-                )}
-              />
+              <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
+                <View style={[styles.inputWrapper, styles.row, errors.password && styles.inputError]}>
+                  <TextInput 
+                    style={styles.inputFlex} 
+                    placeholder="Senha" 
+                    placeholderTextColor="#666" 
+                    secureTextEntry={!isPasswordVisible} 
+                    onChangeText={onChange} 
+                    value={value} 
+                  />
+                  <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+                    <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#888" />
+                  </TouchableOpacity>
+                </View>
+              )} />
               {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
             </View>
 
+            {/* CAMPO CONFIRMAR SENHA COM OLHO */}
             <View style={styles.inputGroup}>
-              <Controller
-                control={control}
-                name="confirmPassword"
-                render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.confirmPassword && styles.inputError]}>
-                    <TextInput 
-                      style={styles.input} 
-                      placeholder="Confirmar Senha" 
-                      placeholderTextColor="#666" 
-                      secureTextEntry 
-                      onChangeText={onChange} 
-                      value={value} 
-                    />
-                  </View>
-                )}
-              />
+              <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
+                <View style={[styles.inputWrapper, styles.row, errors.confirmPassword && styles.inputError]}>
+                  <TextInput 
+                    style={styles.inputFlex} 
+                    placeholder="Confirmar Senha" 
+                    placeholderTextColor="#666" 
+                    secureTextEntry={!isConfirmPasswordVisible} 
+                    onChangeText={onChange} 
+                    value={value} 
+                  />
+                  <TouchableOpacity onPress={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}>
+                    <Ionicons name={isConfirmPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#888" />
+                  </TouchableOpacity>
+                </View>
+              )} />
               {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>}
             </View>
 
@@ -269,7 +221,6 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           </>
         )}
-
         <View style={{ height: 40 }} />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -290,7 +241,9 @@ const styles = StyleSheet.create({
   textBlack: { color: '#000' },
   inputGroup: { marginBottom: 15 },
   inputWrapper: { backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', height: 60, paddingHorizontal: 15, justifyContent: 'center' },
+  row: { flexDirection: 'row', alignItems: 'center' },
   input: { color: '#FFF', fontSize: 16 },
+  inputFlex: { flex: 1, color: '#FFF', fontSize: 16 },
   inputError: { borderColor: '#FF3333' },
   errorText: { color: '#FF3333', fontSize: 12, marginTop: 5, marginLeft: 5 },
   registerButton: { backgroundColor: '#39FF14', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginTop: 20 },

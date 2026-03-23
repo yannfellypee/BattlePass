@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -30,10 +30,22 @@ type LoginData = z.infer<typeof loginSchema>;
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { signIn } = useContext(AuthContext);
+  const { signIn, isAuthenticated, user, isLoading: authLoading } = useContext(AuthContext);
+  
+  // ESTADOS DE CONTROLE
   const [isLoading, setIsLoading] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  // --- 2. CONFIGURAÇÃO DO FORMULÁRIO ---
+  // --- 2. PROTEÇÃO DE ROTA INVERSA ---
+  // Se o usuário já estiver logado, não permite que ele fique nesta tela
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user) {
+      const target = user.type === 'mc' ? '/mc' : user.type === 'organizer' ? '/organizer' : '/audience';
+      router.replace(target as any);
+    }
+  }, [isAuthenticated, authLoading, user]);
+
+  // --- 3. CONFIGURAÇÃO DO FORMULÁRIO ---
   const { control, handleSubmit, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -42,75 +54,71 @@ export default function LoginScreen() {
     }
   });
 
-  // --- 3. LÓGICA DE SUBMISSÃO ---
-  const onSubmit = (data: LoginData) => {
+  // --- 4. LÓGICA DE SUBMISSÃO ---
+  const onSubmit = async (data: LoginData) => {
     setIsLoading(true);
 
     // Simulação de delay para feedback visual
-    setTimeout(() => {
-      // Chama o serviço que busca no mockUsers.ts
-      const user = login(data.email, data.password);
+    setTimeout(async () => {
+      const userFound = login(data.email, data.password);
 
-      if (!user) {
+      if (!userFound) {
         setIsLoading(false);
         Alert.alert(
           "Acesso Negado", 
-          "Usuário não encontrado ou senha incorreta. Verifique os dados e tente novamente."
+          "Usuário não encontrado ou senha incorreta.",
+          [{ text: "Tentar novamente", style: "cancel" }]
         );
         return;
       }
 
-      // Se o usuário existe, salva no Contexto Global
-      signIn({
-        name: user.name,
-        type: user.role, // 'mc', 'organizer' ou 'audience'
+      // 1. Salva no Contexto Global (que agora persiste no AsyncStorage)
+      await signIn({
+        name: userFound.name,
+        type: userFound.role as 'mc' | 'organizer' | 'audience', 
       });
 
       setIsLoading(false);
 
-      // REDIRECIONAMENTO DINÂMICO
-      // Usamos 'as any' para evitar avisos de tipagem do router enquanto o cache atualiza
-      if (user.role === 'mc') {
-        router.replace('/mc' as any);
-      } else if (user.role === 'organizer') {
-        router.replace('/organizer' as any);
-      } else {
-        router.replace('/audience' as any);
-      }
+      // 2. REDIRECIONAMENTO COM REPLACE (Essencial para não voltar ao login)
+      let path = '/audience';
+      if (userFound.role === 'mc') path = '/mc';
+      else if (userFound.role === 'organizer') path = '/organizer';
+
+      router.replace(path as any);
     }, 1500);
   };
+
+  if (authLoading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center' }]}>
+        <ActivityIndicator size="large" color="#39FF14" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      {/* Botão Voltar */}
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Ionicons name="arrow-back" size={28} color="#FFF" />
       </TouchableOpacity>
 
-      {/* Cabeçalho */}
       <View style={styles.header}>
         <Text style={styles.title}>ENTRAR NA <Text style={styles.textNeon}>RODA</Text></Text>
         <Text style={styles.subtitle}>Acesse o seu BattlePass para continuar.</Text>
       </View>
 
       <View style={styles.form}>
-        
-        {/* Campo: E-MAIL */}
         <Controller
           control={control}
           name="email"
           render={({ field: { onChange, onBlur, value } }) => (
             <View style={styles.inputGroup}>
               <View style={[styles.inputContainer, errors.email && styles.inputError]}>
-                <Ionicons 
-                  name="mail-outline" 
-                  size={20} 
-                  color={errors.email ? "#FF3333" : "#888"} 
-                  style={styles.icon} 
-                />
+                <Ionicons name="mail-outline" size={20} color={errors.email ? "#FF3333" : "#888"} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="E-mail" 
@@ -127,28 +135,25 @@ export default function LoginScreen() {
           )}
         />
 
-        {/* Campo: SENHA */}
         <Controller
           control={control}
           name="password"
           render={({ field: { onChange, onBlur, value } }) => (
             <View style={styles.inputGroup}>
               <View style={[styles.inputContainer, errors.password && styles.inputError]}>
-                <Ionicons 
-                  name="lock-closed-outline" 
-                  size={20} 
-                  color={errors.password ? "#FF3333" : "#888"} 
-                  style={styles.icon} 
-                />
+                <Ionicons name="lock-closed-outline" size={20} color={errors.password ? "#FF3333" : "#888"} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Senha" 
                   placeholderTextColor="#666"
-                  secureTextEntry
+                  secureTextEntry={!isPasswordVisible}
                   onBlur={onBlur}
                   onChangeText={onChange}
                   value={value}
                 />
+                <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)} style={styles.eyeButton}>
+                  <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#888" />
+                </TouchableOpacity>
               </View>
               {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
             </View>
@@ -159,21 +164,11 @@ export default function LoginScreen() {
           <Text style={styles.forgotPasswordText}>Esqueci minha senha</Text>
         </TouchableOpacity>
 
-        {/* Botão de Entrar */}
-        <TouchableOpacity 
-          style={styles.buttonPrimary} 
-          onPress={handleSubmit(onSubmit)}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.buttonPrimaryText}>ENTRAR</Text>
-          )}
+        <TouchableOpacity style={styles.buttonPrimary} onPress={handleSubmit(onSubmit)} disabled={isLoading}>
+          {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonPrimaryText}>ENTRAR</Text>}
         </TouchableOpacity>
       </View>
 
-      {/* Rodapé */}
       <View style={styles.footer}>
         <Text style={styles.footerText}>Ainda não tem o passaporte?</Text>
         <TouchableOpacity onPress={() => router.push('/auth/register')}>
@@ -203,20 +198,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     height: 60,
   },
-  icon: { marginRight: 10 },
-  input: { flex: 1, color: '#FFF', fontSize: 16 },
+  input: { flex: 1, color: '#FFF', fontSize: 16, marginLeft: 10 },
+  eyeButton: { padding: 5 },
   inputError: { borderColor: '#FF3333' },
   errorText: { color: '#FF3333', fontSize: 12, marginTop: 5, marginLeft: 5 },
   forgotPassword: { alignItems: 'flex-end', marginBottom: 30 },
   forgotPasswordText: { color: '#888', fontSize: 14 },
-  buttonPrimary: {
-    backgroundColor: '#39FF14',
-    paddingVertical: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    height: 60,
-    justifyContent: 'center'
-  },
+  buttonPrimary: { backgroundColor: '#39FF14', paddingVertical: 18, borderRadius: 12, alignItems: 'center', height: 60, justifyContent: 'center' },
   buttonPrimaryText: { color: '#000', fontSize: 16, fontWeight: '900' },
   footer: { flexDirection: 'row', justifyContent: 'center', paddingBottom: 40, marginTop: 20 },
   footerText: { color: '#888', fontSize: 14 },

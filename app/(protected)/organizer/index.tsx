@@ -1,21 +1,21 @@
 import React, { useContext } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { AuthContext } from '../../src/context/AuthContext';
+import { AuthContext } from '../../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function McScreen() {
+export default function OrganizerScreen() {
   const { user } = useContext(AuthContext);
 
   return (
     <View style={styles.container}>
-      <Ionicons name="mic" size={80} color="#39FF14" />
+      <Ionicons name="megaphone" size={80} color="#39FF14" />
 
-      <Text style={styles.title}>Bem-vindo, MC 🎤</Text>
+      <Text style={styles.title}>Bem-vindo, Organizador 📢</Text>
 
       <Text style={styles.name}>{user?.name}</Text>
 
       <Text style={styles.subtitle}>
-        Hora de rimar, batalhar e subir no ranking.
+        Crie eventos, gerencie batalhas e movimente a cena.
       </Text>
     </View>
   );

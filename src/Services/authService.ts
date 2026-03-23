@@ -1,12 +1,10 @@
-const users: any[] = [];
+import { mockUsers, User } from './mockUsers';
 
-export function register(user: any) {
-  users.push(user);
-  return user;
-}
-
-export function login(email: string, password: string) {
-  return users.find(
-    (u) => u.email === email && u.password === password
+export const login = (email: string, password: string): User | null => {
+  // Busca exata por email (ignorando maiúsculas) e senha
+  const user = mockUsers.find(
+    (u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password
   );
-}
+
+  return user || null;
+};
