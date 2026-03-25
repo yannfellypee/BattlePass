@@ -1,16 +1,38 @@
-import React, { useContext } from 'react';
-import { Redirect, Stack, useSegments } from 'expo-router';
+import React, { useContext, useEffect } from 'react';
+import { Stack, useSegments, useRouter } from 'expo-router'; // Trocamos Redirect por useRouter
 import { ActivityIndicator, View, StyleSheet, Modal, Text } from 'react-native';
 import { AuthContext } from '../../src/context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function ProtectedLayout() {
-  const { isAuthenticated, user, isLoading, isLoggingOut } = useContext(AuthContext);
-  
-  // CORREÇÃO DO ERRO TS(2345): Forçamos o tipo para string[]
+  // Ajustado para usar 'loading' e 'user' que seu contexto fornece
+  const { user, loading: isLoading, isLoggingOut } = useContext(AuthContext);
   const segments = useSegments() as string[];
+  const router = useRouter();
 
-  // 1. LOADING DE ENTRADA
+  // 1. PROTEÇÃO DE ROTA VIA EFFECT (Mais estável que o componente Redirect)
+  useEffect(() => {
+    if (isLoading || isLoggingOut) return;
+
+    // Se não há usuário, manda para o login
+    if (!user) {
+      router.replace('/auth/login');
+      return;
+    }
+
+    // Alinhando com o 'role' que salvamos no metadata
+    const userRole = user?.user_metadata?.role;
+
+    // Verifica permissão de pasta
+    if (segments.includes('mc') && userRole !== 'mc') {
+      router.replace('/audience'); // Fallback se o MC tentar entrar onde não deve
+    }
+    if (segments.includes('organizer') && userRole !== 'organizer') {
+      router.replace('/audience');
+    }
+  }, [user, isLoading, segments, isLoggingOut]);
+
+  // 2. TELA DE CARREGAMENTO
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -19,20 +41,13 @@ export default function ProtectedLayout() {
     );
   }
 
-  // 2. PROTEÇÃO DE ACESSO
-  if (!isAuthenticated && !isLoggingOut) {
-    return <Redirect href="/auth/login" />;
-  }
-
-  // 3. VERIFICAÇÃO DE PERMISSÃO (Silenciosa)
-  const userRole = user?.type;
-  if (segments.includes('mc') && userRole !== 'mc') return <Redirect href="/(tabs)" />;
-  if (segments.includes('organizer') && userRole !== 'organizer') return <Redirect href="/(tabs)" />;
+  // Se não tem usuário, não renderiza nada (o useEffect vai redirecionar)
+  if (!user && !isLoggingOut) return null;
 
   return (
     <View style={styles.container}>
       
-      {/* OVERLAY DE LOGOUT (5 segundos de despedida) */}
+      {/* OVERLAY DE LOGOUT */}
       <Modal visible={isLoggingOut} transparent animationType="fade">
         <View style={styles.logoutOverlay}>
           <Ionicons name="mic-off" size={80} color="#39FF14" />
@@ -42,52 +57,24 @@ export default function ProtectedLayout() {
         </View>
       </Modal>
 
-      {/* STACK: Gerencia as Tabs e as Telas Internas com segurança */}
       <Stack 
         screenOptions={{ 
           headerShown: false, 
-          gestureEnabled: false, // Trava o "swipe" de voltar no iOS
+          gestureEnabled: false, 
           contentStyle: { backgroundColor: '#0D0D0D' } 
         }} 
       >
-        {/* Registra o grupo de abas como a tela principal da área protegida */}
         <Stack.Screen name="(tabs)" />
       </Stack>
     </View>
   );
 }
 
+// Mantenha seus styles como estão...
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#0D0D0D',
-  },
-  logoutOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(13, 13, 13, 0.98)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20
-  },
-  logoutTitle: {
-    color: '#FFF',
-    fontSize: 26,
-    fontWeight: '900',
-    marginTop: 20,
-    fontStyle: 'italic',
-    textAlign: 'center'
-  },
-  logoutSubtitle: {
-    color: '#39FF14',
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 10,
-    fontWeight: '600'
-  }
+  loadingContainer: { flex: 1, backgroundColor: '#0D0D0D', justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#0D0D0D' },
+  logoutOverlay: { flex: 1, backgroundColor: 'rgba(13, 13, 13, 0.98)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  logoutTitle: { color: '#FFF', fontSize: 26, fontWeight: '900', marginTop: 20, fontStyle: 'italic', textAlign: 'center' },
+  logoutSubtitle: { color: '#39FF14', fontSize: 16, textAlign: 'center', marginTop: 10, fontWeight: '600' }
 });

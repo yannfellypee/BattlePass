@@ -1,20 +1,21 @@
 import React, { useState } from 'react';
 import { 
   View, Text, TextInput, StyleSheet, TouchableOpacity, 
-  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator 
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { supabase } from "../../src/utils/supabase";
 
-// --- 1. ESQUEMA DE VALIDAÇÃO (ZOD) ---
+// --- 1. ESQUEMA DE VALIDAÇÃO ---
 const registerSchema = z.object({
   role: z.enum(['Public', 'MC', 'Organizer']),
-  name: z.string().min(2, 'O nome precisa ter pelo menos 2 caracteres'),
-  fullName: z.string().optional(), 
-  document: z.string().min(11, 'Documento inválido (mínimo 11 dígitos)'),
+  name: z.string().optional(), // Vulgo ou Nome da Org
+  fullName: z.string().min(5, 'Informe seu nome completo'), 
+  document: z.string().min(14, 'CPF inválido'), // 14 caracteres com máscara
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
   confirmPassword: z.string(),
@@ -24,13 +25,12 @@ const registerSchema = z.object({
   path: ['confirmPassword'],
 })
 .refine((data) => {
-  if (data.role === 'MC') {
-    return !!data.fullName && data.fullName.trim().length >= 5;
-  }
+  // Se não for Público, o "Vulgo/Nome Org" é obrigatório
+  if (data.role !== 'Public' && (!data.name || data.name.length < 2)) return false;
   return true;
 }, {
-  message: 'Nome completo é obrigatório para MC',
-  path: ['fullName'],
+  message: 'Este campo é obrigatório para seu perfil',
+  path: ['name'],
 });
 
 type RegisterData = z.infer<typeof registerSchema>;
@@ -39,189 +39,224 @@ export default function RegisterScreen() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-
-  // --- NOVOS ESTADOS PARA VISIBILIDADE DAS SENHAS ---
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
 
   const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
-    defaultValues: {
-      role: 'Public',
-      name: '',
-      fullName: '',
-      email: '',
-      document: '',
-      password: '',
-      confirmPassword: '',
+    defaultValues: { 
+      role: 'Public', name: '', fullName: '', email: '', document: '', password: '', confirmPassword: '' 
     }
   });
 
   const selectedRole = watch('role');
 
-  const onSubmit = async (data: RegisterData) => {
-    setIsSubmitting(true);
-    const rawDocument = data.document.replace(/\D/g, '');
-
-    const dadosParaOBanco = {
-      nome_usuario: data.name,
-      nome_completo: data.role === 'MC' ? data.fullName : data.name,
-      email: data.email,
-      password: data.password,
-      role: data.role.toLowerCase(),
-      documento_numero: rawDocument,
-      tipo_documento: rawDocument.length > 11 ? 'CNPJ' : 'CPF'
-    };
-
-    console.log("DADOS PRONTOS:", JSON.stringify(dadosParaOBanco, null, 2));
-
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setShowSuccess(true);
-      setTimeout(() => {
-        router.replace('/auth/login');
-      }, 2000);
-    }, 5000);
+  // --- 2. MÁSCARA DE CPF ---
+  const formatCPF = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    return digits
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .substring(0, 14);
   };
 
+  // --- 3. LÓGICA DE SUBMISSÃO ---
+  const onSubmit = async (data: RegisterData) => {
+    setIsSubmitting(true);
+    const rawDocument = data.document.replace(/\D/g, ''); // Limpa para o banco
+
+    try {
+      // A. Criar no Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: { 
+            data: { 
+                role: data.role.toLowerCase(),
+                display_name: data.role === 'Public' ? data.fullName : data.name 
+            } 
+        }
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("Falha ao gerar credenciais.");
+
+      const userId = authData.user.id;
+      let profileError;
+
+      // B. Inserção baseada no seu SQL
+      if (data.role === 'MC') {
+        const { error } = await supabase.from('perfil_mc').insert({
+          id: userId,
+          nome_completo: data.fullName,
+          nome_artistico: data.name, // Nome de MC
+          cpf: rawDocument,
+          email_vinculado: data.email
+        });
+        profileError = error;
+      } 
+      else if (data.role === 'Organizer') {
+        const { error } = await supabase.from('perfil_organizacao').insert({
+          id: userId,
+          nome_organizacao: data.name,
+          nome_responsavel: data.fullName,
+          cpf_responsavel: rawDocument, // Coluna específica do seu SQL
+          email_vinculado: data.email
+        });
+        profileError = error;
+      } 
+      else {
+        const { error } = await supabase.from('perfil_audiencia').insert({
+          id: userId,
+          nome_completo: data.fullName,
+          cpf: rawDocument,
+          email_vinculado: data.email
+        });
+        profileError = error;
+      }
+
+      if (profileError) throw profileError;
+
+      // C. Sucesso
+      setShowSuccess(true);
+      setTimeout(() => router.replace('/auth/login'), 4000);
+
+    } catch (error: any) {
+      Alert.alert("Erro no Cadastro", error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (showSuccess) {
+    return (
+      <View style={styles.successContainer}>
+        <Ionicons name="checkmark-circle" size={80} color="#39FF14" />
+        <Text style={styles.successTitle}>PASSAPORTE CRIADO!</Text>
+        <Text style={styles.successSubtitle}>Redirecionando para a roda...</Text>
+        <ActivityIndicator size="large" color="#39FF14" style={{ marginTop: 30 }} />
+      </View>
+    );
+  }
+
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-      style={styles.container}
-    >
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={28} color="#FFF" />
-          </TouchableOpacity>
-          <Text style={styles.title}>CRIAR <Text style={styles.textNeon}>CONTA</Text></Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#FFF" />
+        </TouchableOpacity>
+
+        <Text style={styles.title}>STREET<Text style={styles.textNeon}>PASS</Text></Text>
+        
+        <Text style={styles.sectionLabel}>QUAL SEU PAPEL NA CENA?</Text>
+        <View style={styles.rolesGrid}>
+          {['Public', 'MC', 'Organizer'].map((r) => (
+            <TouchableOpacity 
+              key={r} 
+              style={[styles.roleBtn, selectedRole === r && styles.roleBtnActive]} 
+              onPress={() => setValue('role', r as any)}
+            >
+              <Ionicons 
+                name={r === 'MC' ? 'mic' : r === 'Public' ? 'people' : 'megaphone'} 
+                size={20} 
+                color={selectedRole === r ? '#000' : '#888'} 
+              />
+              <Text style={[styles.roleBtnText, selectedRole === r && styles.textBlack]}>
+                {r === 'Public' ? 'Público' : r === 'Organizer' ? 'Organizador' : r}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {isSubmitting || showSuccess ? (
-          <View style={styles.feedbackContainer}>
-            {isSubmitting ? (
-              <>
-                <ActivityIndicator size="large" color="#39FF14" />
-                <Text style={styles.feedbackText}>Processando teu registro na cena...</Text>
-              </>
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={80} color="#39FF14" />
-                <Text style={styles.successTitle}>Conta criada!</Text>
-                <Text style={styles.feedbackText}>Redirecionando para o login...</Text>
-              </>
-            )}
-          </View>
-        ) : (
-          <>
-            <Text style={styles.sectionTitle}>QUEM ÉS TU NA CENA?</Text>
-            <View style={styles.rolesContainer}>
-              {['Public', 'MC', 'Organizer'].map((role) => (
-                <TouchableOpacity 
-                  key={role}
-                  style={[styles.roleCard, selectedRole === role && styles.roleCardActive]} 
-                  onPress={() => setValue('role', role as any)}
-                >
-                  <Ionicons 
-                    name={role === 'Public' ? 'people' : role === 'MC' ? 'mic' : 'megaphone'} 
-                    size={24} 
-                    color={selectedRole === role ? '#000' : '#888'} 
-                  />
-                  <Text style={[styles.roleTitle, selectedRole === role && styles.textBlack]}>
-                    {role === 'Public' ? 'Público' : role === 'MC' ? 'MC' : 'Org'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.sectionTitle}>OS TEUS DADOS</Text>
-
-            {/* Inputs de texto (Nome, Documento, Email) mantidos conforme original */}
-            {selectedRole === 'MC' && (
-              <View style={styles.inputGroup}>
-                <Controller control={control} name="fullName" render={({ field: { onChange, value } }) => (
-                  <View style={[styles.inputWrapper, errors.fullName && styles.inputError]}>
-                    <TextInput style={styles.input} placeholder="Nome Completo" placeholderTextColor="#666" onChangeText={onChange} value={value} />
-                  </View>
-                )} />
-                {errors.fullName && <Text style={styles.errorText}>{errors.fullName.message}</Text>}
+        <View style={styles.form}>
+          {/* Nome Completo */}
+          <Controller control={control} name="fullName" render={({ field: { onChange, value } }) => (
+            <View style={styles.fieldGroup}>
+              <View style={[styles.inputBox, errors.fullName && styles.inputBoxError]}>
+                <TextInput style={styles.input} placeholder="Nome Completo" placeholderTextColor="#555" onChangeText={onChange} value={value} />
               </View>
-            )}
-
-            <View style={styles.inputGroup}>
-              <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
-                  <TextInput style={styles.input} placeholder={selectedRole === 'MC' ? "Vulgo (Nome Artístico)" : "Nome de Usuário"} placeholderTextColor="#666" onChangeText={onChange} value={value} />
-                </View>
-              )} />
-              {errors.name && <Text style={styles.errorText}>{errors.name.message}</Text>}
+              {errors.fullName && <Text style={styles.errTxt}>{errors.fullName.message}</Text>}
             </View>
+          )} />
 
-            <View style={styles.inputGroup}>
-              <Controller control={control} name="document" render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputWrapper, errors.document && styles.inputError]}>
-                  <TextInput style={styles.input} placeholder="CPF/CNPJ" placeholderTextColor="#666" keyboardType="numeric" onChangeText={onChange} value={value} />
-                </View>
-              )} />
-              {errors.document && <Text style={styles.errorText}>{errors.document.message}</Text>}
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputWrapper, errors.email && styles.inputError]}>
-                  <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor="#666" keyboardType="email-address" autoCapitalize="none" onChangeText={onChange} value={value} />
-                </View>
-              )} />
-              {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
-            </View>
-
-            {/* CAMPO SENHA COM OLHO */}
-            <View style={styles.inputGroup}>
-              <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputWrapper, styles.row, errors.password && styles.inputError]}>
+          {/* Vulgo / Nome de MC / Nome Org (Oculto para Público) */}
+          {selectedRole !== 'Public' && (
+            <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
+              <View style={styles.fieldGroup}>
+                <View style={[styles.inputBox, errors.name && styles.inputBoxError]}>
                   <TextInput 
-                    style={styles.inputFlex} 
-                    placeholder="Senha" 
-                    placeholderTextColor="#666" 
-                    secureTextEntry={!isPasswordVisible} 
+                    style={styles.input} 
+                    placeholder={selectedRole === 'MC' ? "Seu Nome de MC" : "Nome da Organização/Roda"} 
+                    placeholderTextColor="#555" 
                     onChangeText={onChange} 
                     value={value} 
                   />
-                  <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
-                    <Ionicons name={isPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#888" />
-                  </TouchableOpacity>
                 </View>
-              )} />
-              {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
-            </View>
+                {errors.name && <Text style={styles.errTxt}>{errors.name.message}</Text>}
+              </View>
+            )} />
+          )}
 
-            {/* CAMPO CONFIRMAR SENHA COM OLHO */}
-            <View style={styles.inputGroup}>
-              <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
-                <View style={[styles.inputWrapper, styles.row, errors.confirmPassword && styles.inputError]}>
-                  <TextInput 
-                    style={styles.inputFlex} 
-                    placeholder="Confirmar Senha" 
-                    placeholderTextColor="#666" 
-                    secureTextEntry={!isConfirmPasswordVisible} 
-                    onChangeText={onChange} 
-                    value={value} 
-                  />
-                  <TouchableOpacity onPress={() => setIsConfirmPasswordVisible(!isConfirmPasswordVisible)}>
-                    <Ionicons name={isConfirmPasswordVisible ? "eye-off-outline" : "eye-outline"} size={22} color="#888" />
-                  </TouchableOpacity>
-                </View>
-              )} />
-              {errors.confirmPassword && <Text style={styles.errorText}>{errors.confirmPassword.message}</Text>}
+          {/* CPF */}
+          <Controller control={control} name="document" render={({ field: { onChange, value } }) => (
+            <View style={styles.fieldGroup}>
+              <View style={[styles.inputBox, errors.document && styles.inputBoxError]}>
+                <TextInput 
+                  style={styles.input} 
+                  placeholder="CPF" 
+                  placeholderTextColor="#555" 
+                  keyboardType="numeric" 
+                  maxLength={14} 
+                  onChangeText={(t) => onChange(formatCPF(t))} 
+                  value={value} 
+                />
+              </View>
+              {errors.document && <Text style={styles.errTxt}>{errors.document.message}</Text>}
             </View>
+          )} />
 
-            <TouchableOpacity style={styles.registerButton} onPress={handleSubmit(onSubmit)}>
-              <Text style={styles.registerButtonText}>FINALIZAR REGISTO</Text>
-            </TouchableOpacity>
-          </>
-        )}
-        <View style={{ height: 40 }} />
+          {/* E-mail */}
+          <Controller control={control} name="email" render={({ field: { onChange, value } }) => (
+            <View style={styles.fieldGroup}>
+              <View style={[styles.inputBox, errors.email && styles.inputBoxError]}>
+                <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor="#555" autoCapitalize="none" keyboardType="email-address" onChangeText={onChange} value={value} />
+              </View>
+              {errors.email && <Text style={styles.errTxt}>{errors.email.message}</Text>}
+            </View>
+          )} />
+
+          {/* Senha */}
+          <Controller control={control} name="password" render={({ field: { onChange, value } }) => (
+            <View style={styles.fieldGroup}>
+              <View style={[styles.inputBox, errors.password && styles.inputBoxError]}>
+                <TextInput style={styles.input} placeholder="Senha (mín. 6 dígitos)" placeholderTextColor="#555" secureTextEntry={!isPasswordVisible} onChangeText={onChange} value={value} />
+                <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
+                  <Ionicons name={isPasswordVisible ? "eye-off" : "eye"} size={20} color="#555" />
+                </TouchableOpacity>
+              </View>
+              {errors.password && <Text style={styles.errTxt}>{errors.password.message}</Text>}
+            </View>
+          )} />
+
+          {/* Confirmar Senha */}
+          <Controller control={control} name="confirmPassword" render={({ field: { onChange, value } }) => (
+            <View style={styles.fieldGroup}>
+              <View style={[styles.inputBox, errors.confirmPassword && styles.inputBoxError]}>
+                <TextInput style={styles.input} placeholder="Confirmar Senha" placeholderTextColor="#555" secureTextEntry={!isPasswordVisible} onChangeText={onChange} value={value} />
+              </View>
+              {errors.confirmPassword && <Text style={styles.errTxt}>{errors.confirmPassword.message}</Text>}
+            </View>
+          )} />
+
+          <TouchableOpacity 
+            style={[styles.mainBtn, isSubmitting && { opacity: 0.7 }]} 
+            onPress={handleSubmit(onSubmit)} 
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.mainBtnText}>REGISTRAR AGORA</Text>}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -229,26 +264,25 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
-  scrollContent: { paddingHorizontal: 20, paddingTop: 50 },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 30, gap: 15 },
-  title: { fontSize: 28, fontWeight: '900', color: '#FFF', fontStyle: 'italic' },
+  scrollContent: { paddingHorizontal: 25, paddingTop: 50, paddingBottom: 40 },
+  backBtn: { marginBottom: 20 },
+  title: { fontSize: 36, fontWeight: '900', color: '#FFF', fontStyle: 'italic', textAlign: 'center', marginBottom: 30 },
   textNeon: { color: '#39FF14' },
-  sectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.5, marginBottom: 15, marginTop: 10 },
-  rolesContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 30 },
-  roleCard: { width: '31%', backgroundColor: '#1A1A1A', padding: 15, borderRadius: 12, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
-  roleCardActive: { backgroundColor: '#39FF14', borderColor: '#39FF14' },
-  roleTitle: { color: '#FFF', fontSize: 12, fontWeight: 'bold', marginTop: 10 },
+  sectionLabel: { color: '#666', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 15 },
+  rolesGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  roleBtn: { width: '31%', backgroundColor: '#1A1A1A', paddingVertical: 15, borderRadius: 12, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
+  roleBtnActive: { backgroundColor: '#39FF14', borderColor: '#39FF14' },
+  roleBtnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginTop: 8 },
   textBlack: { color: '#000' },
-  inputGroup: { marginBottom: 15 },
-  inputWrapper: { backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', height: 60, paddingHorizontal: 15, justifyContent: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center' },
-  input: { color: '#FFF', fontSize: 16 },
-  inputFlex: { flex: 1, color: '#FFF', fontSize: 16 },
-  inputError: { borderColor: '#FF3333' },
-  errorText: { color: '#FF3333', fontSize: 12, marginTop: 5, marginLeft: 5 },
-  registerButton: { backgroundColor: '#39FF14', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginTop: 20 },
-  registerButtonText: { color: '#000', fontSize: 16, fontWeight: '900' },
-  feedbackContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 120 },
-  feedbackText: { color: '#888', marginTop: 20, fontSize: 16, textAlign: 'center' },
-  successTitle: { color: '#39FF14', fontSize: 24, fontWeight: 'bold', marginTop: 20 },
+  form: { gap: 12 },
+  fieldGroup: { marginBottom: 5 },
+  inputBox: { backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', height: 58, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center' },
+  inputBoxError: { borderColor: '#FF3333' },
+  input: { flex: 1, color: '#FFF', fontSize: 16 },
+  errTxt: { color: '#FF3333', fontSize: 11, marginTop: 4, marginLeft: 5 },
+  mainBtn: { backgroundColor: '#39FF14', paddingVertical: 20, borderRadius: 12, alignItems: 'center', marginTop: 20 },
+  mainBtnText: { color: '#000', fontSize: 16, fontWeight: '900' },
+  successContainer: { flex: 1, backgroundColor: '#0D0D0D', justifyContent: 'center', alignItems: 'center' },
+  successTitle: { color: '#FFF', fontSize: 28, fontWeight: '900', marginTop: 20 },
+  successSubtitle: { color: '#39FF14', fontSize: 16, marginTop: 5 },
 });
