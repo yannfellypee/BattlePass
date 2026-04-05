@@ -10,12 +10,10 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { supabase } from "../../src/utils/supabase";
 
-// --- 1. ESQUEMA DE VALIDAÇÃO ---
+// --- 1. ESQUEMA DE VALIDAÇÃO SIMPLIFICADO ---
 const registerSchema = z.object({
-  role: z.enum(['Public', 'MC', 'Organizer']),
-  name: z.string().optional(), // Vulgo ou Nome da Org
   fullName: z.string().min(5, 'Informe seu nome completo'), 
-  document: z.string().min(14, 'CPF inválido'), // 14 caracteres com máscara
+  document: z.string().min(14, 'CPF inválido'), 
   email: z.string().email('E-mail inválido'),
   password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
   confirmPassword: z.string(),
@@ -23,14 +21,6 @@ const registerSchema = z.object({
 .refine((data) => data.password === data.confirmPassword, {
   message: 'As senhas não coincidem',
   path: ['confirmPassword'],
-})
-.refine((data) => {
-  // Se não for Público, o "Vulgo/Nome Org" é obrigatório
-  if (data.role !== 'Public' && (!data.name || data.name.length < 2)) return false;
-  return true;
-}, {
-  message: 'Este campo é obrigatório para seu perfil',
-  path: ['name'],
 });
 
 type RegisterData = z.infer<typeof registerSchema>;
@@ -41,16 +31,13 @@ export default function RegisterScreen() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
-  const { control, handleSubmit, setValue, watch, formState: { errors } } = useForm<RegisterData>({
+  const { control, handleSubmit, formState: { errors } } = useForm<RegisterData>({
     resolver: zodResolver(registerSchema),
     defaultValues: { 
-      role: 'Public', name: '', fullName: '', email: '', document: '', password: '', confirmPassword: '' 
+      fullName: '', email: '', document: '', password: '', confirmPassword: '' 
     }
   });
 
-  const selectedRole = watch('role');
-
-  // --- 2. MÁSCARA DE CPF ---
   const formatCPF = (value: string) => {
     const digits = value.replace(/\D/g, '');
     return digits
@@ -60,64 +47,34 @@ export default function RegisterScreen() {
       .substring(0, 14);
   };
 
-  // --- 3. LÓGICA DE SUBMISSÃO ---
   const onSubmit = async (data: RegisterData) => {
     setIsSubmitting(true);
-    const rawDocument = data.document.replace(/\D/g, ''); // Limpa para o banco
+    const rawDocument = data.document.replace(/\D/g, '');
 
     try {
-      // A. Criar no Supabase Auth
+      // A. Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: { 
-            data: { 
-                role: data.role.toLowerCase(),
-                display_name: data.role === 'Public' ? data.fullName : data.name 
-            } 
+            data: { display_name: data.fullName } 
         }
       });
 
       if (authError) throw authError;
-      if (!authData.user) throw new Error("Falha ao gerar credenciais.");
+      const userId = authData.user!.id;
 
-      const userId = authData.user.id;
-      let profileError;
-
-      // B. Inserção baseada no seu SQL
-      if (data.role === 'MC') {
-        const { error } = await supabase.from('perfil_mc').insert({
-          id: userId,
-          nome_completo: data.fullName,
-          nome_artistico: data.name, // Nome de MC
-          cpf: rawDocument,
-          email_vinculado: data.email
-        });
-        profileError = error;
-      } 
-      else if (data.role === 'Organizer') {
-        const { error } = await supabase.from('perfil_organizacao').insert({
-          id: userId,
-          nome_organizacao: data.name,
-          nome_responsavel: data.fullName,
-          cpf_responsavel: rawDocument, // Coluna específica do seu SQL
-          email_vinculado: data.email
-        });
-        profileError = error;
-      } 
-      else {
-        const { error } = await supabase.from('perfil_audiencia').insert({
-          id: userId,
-          nome_completo: data.fullName,
-          cpf: rawDocument,
-          email_vinculado: data.email
-        });
-        profileError = error;
-      }
+      // B. Tabela Única de Perfis
+      const { error: profileError } = await supabase.from('perfis').insert({
+        id: userId,
+        nome_completo: data.fullName,
+        cpf: rawDocument,
+        email_vinculado: data.email,
+        nivel_acesso: 1 // Nível base: Público
+      });
 
       if (profileError) throw profileError;
 
-      // C. Sucesso
       setShowSuccess(true);
       setTimeout(() => router.replace('/auth/login'), 4000);
 
@@ -131,9 +88,9 @@ export default function RegisterScreen() {
   if (showSuccess) {
     return (
       <View style={styles.successContainer}>
-        <Ionicons name="checkmark-circle" size={80} color="#39FF14" />
-        <Text style={styles.successTitle}>PASSAPORTE CRIADO!</Text>
-        <Text style={styles.successSubtitle}>Redirecionando para a roda...</Text>
+        <Ionicons name="flash" size={80} color="#39FF14" />
+        <Text style={styles.successTitle}>CONTA CRIADA!</Text>
+        <Text style={styles.successSubtitle}>Prepare sua rima...</Text>
         <ActivityIndicator size="large" color="#39FF14" style={{ marginTop: 30 }} />
       </View>
     );
@@ -149,25 +106,7 @@ export default function RegisterScreen() {
 
         <Text style={styles.title}>STREET<Text style={styles.textNeon}>PASS</Text></Text>
         
-        <Text style={styles.sectionLabel}>QUAL SEU PAPEL NA CENA?</Text>
-        <View style={styles.rolesGrid}>
-          {['Public', 'MC', 'Organizer'].map((r) => (
-            <TouchableOpacity 
-              key={r} 
-              style={[styles.roleBtn, selectedRole === r && styles.roleBtnActive]} 
-              onPress={() => setValue('role', r as any)}
-            >
-              <Ionicons 
-                name={r === 'MC' ? 'mic' : r === 'Public' ? 'people' : 'megaphone'} 
-                size={20} 
-                color={selectedRole === r ? '#000' : '#888'} 
-              />
-              <Text style={[styles.roleBtnText, selectedRole === r && styles.textBlack]}>
-                {r === 'Public' ? 'Público' : r === 'Organizer' ? 'Organizador' : r}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Text style={styles.welcomeText}>Crie seu perfil e faça parte da cena!</Text>
 
         <View style={styles.form}>
           {/* Nome Completo */}
@@ -179,24 +118,6 @@ export default function RegisterScreen() {
               {errors.fullName && <Text style={styles.errTxt}>{errors.fullName.message}</Text>}
             </View>
           )} />
-
-          {/* Vulgo / Nome de MC / Nome Org (Oculto para Público) */}
-          {selectedRole !== 'Public' && (
-            <Controller control={control} name="name" render={({ field: { onChange, value } }) => (
-              <View style={styles.fieldGroup}>
-                <View style={[styles.inputBox, errors.name && styles.inputBoxError]}>
-                  <TextInput 
-                    style={styles.input} 
-                    placeholder={selectedRole === 'MC' ? "Seu Nome de MC" : "Nome da Organização/Roda"} 
-                    placeholderTextColor="#555" 
-                    onChangeText={onChange} 
-                    value={value} 
-                  />
-                </View>
-                {errors.name && <Text style={styles.errTxt}>{errors.name.message}</Text>}
-              </View>
-            )} />
-          )}
 
           {/* CPF */}
           <Controller control={control} name="document" render={({ field: { onChange, value } }) => (
@@ -254,7 +175,7 @@ export default function RegisterScreen() {
             onPress={handleSubmit(onSubmit)} 
             disabled={isSubmitting}
           >
-            {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.mainBtnText}>REGISTRAR AGORA</Text>}
+            {isSubmitting ? <ActivityIndicator color="#000" /> : <Text style={styles.mainBtnText}>CRIAR MEU PERFIL</Text>}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -266,14 +187,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D' },
   scrollContent: { paddingHorizontal: 25, paddingTop: 50, paddingBottom: 40 },
   backBtn: { marginBottom: 20 },
-  title: { fontSize: 36, fontWeight: '900', color: '#FFF', fontStyle: 'italic', textAlign: 'center', marginBottom: 30 },
+  title: { fontSize: 36, fontWeight: '900', color: '#FFF', fontStyle: 'italic', textAlign: 'center', marginBottom: 10 },
   textNeon: { color: '#39FF14' },
-  sectionLabel: { color: '#666', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 15 },
-  rolesGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
-  roleBtn: { width: '31%', backgroundColor: '#1A1A1A', paddingVertical: 15, borderRadius: 12, borderWidth: 1, borderColor: '#333', alignItems: 'center' },
-  roleBtnActive: { backgroundColor: '#39FF14', borderColor: '#39FF14' },
-  roleBtnText: { color: '#FFF', fontSize: 10, fontWeight: 'bold', marginTop: 8 },
-  textBlack: { color: '#000' },
+  welcomeText: { color: '#888', fontSize: 14, textAlign: 'center', marginBottom: 30 },
   form: { gap: 12 },
   fieldGroup: { marginBottom: 5 },
   inputBox: { backgroundColor: '#1A1A1A', borderRadius: 12, borderWidth: 1, borderColor: '#333', height: 58, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center' },

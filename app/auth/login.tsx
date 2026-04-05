@@ -30,97 +30,59 @@ type LoginData = z.infer<typeof loginSchema>;
 export default function LoginScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
-  const { user, loading: authLoading, signOut } = useContext(AuthContext); // Certifique-se que AuthContext exporta signOut
+  
+  // Pegamos o estado global do contexto revisado
+  const { perfil, loading: authLoading, user } = useContext(AuthContext); 
   
   const [isLoading, setIsLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isNavigating, setIsNavigating] = useState(false);
 
-  // --- FUNÇÃO AUXILIAR PARA CHECAR PERFIL NO BANCO ---
-  const checkProfileExists = async (userId: string) => {
-    const [resMC, resAud, resOrg] = await Promise.all([
-      supabase.from('perfil_mc').select('id').eq('id', userId).maybeSingle(),
-      supabase.from('perfil_audiencia').select('id').eq('id', userId).maybeSingle(),
-      supabase.from('perfil_organizacao').select('id').eq('id', userId).maybeSingle()
-    ]);
-    return resMC.data || resAud.data || resOrg.data;
-  };
-
-  // --- 1. REDIRECIONAMENTO E VALIDAÇÃO DE SESSÃO ATIVA ---
+  // --- REDIRECIONAMENTO INTELIGENTE ---
   useEffect(() => {
-    const validateActiveSession = async () => {
-      if (!authLoading && user && !isNavigating && isFocused) {
-        setIsNavigating(true);
-        
-        // Verifica se o perfil ainda existe no banco de dados
-        const profile = await checkProfileExists(user.id);
-
-        if (!profile) {
-          Alert.alert("Sessão Inválida", "Seu perfil não foi encontrado. Por favor, crie uma nova conta.");
-          await supabase.auth.signOut(); // Força o logout no Supabase
-          if (signOut) signOut(); // Limpa o estado no seu Contexto
-          setIsNavigating(false);
-          return;
-        }
-
-        // Se o perfil existe, redireciona pelo cargo
-        const role = user.user_metadata?.role; 
-        setTimeout(() => {
-          if (role === 'mc') router.replace('/mc');
-          else if (role === 'organizer') router.replace('/organizer');
-          else router.replace('/audience');
-        }, 0);
-      }
-    };
-
-    validateActiveSession();
-  }, [user, authLoading, isFocused]);
+    // Se o loading do contexto parou E temos um usuário/perfil
+    if (!authLoading && user && perfil && isFocused) {
+      console.log("Redirecionando usuário nível:", perfil.nivel_acesso);
+      
+      if (perfil.nivel_acesso === 2) router.replace('/mc');
+      else if (perfil.nivel_acesso === 3) router.replace('/organizer');
+      else router.replace('/audience'); // Garanta que esta pasta existe em app/(protected)/audience
+    }
+  }, [perfil, authLoading, user, isFocused]);
 
   const { control, handleSubmit, formState: { errors } } = useForm<LoginData>({
     resolver: zodResolver(loginSchema),
     defaultValues: { identifier: '', password: '' }
   });
 
-  // --- 2. LÓGICA DE LOGIN COM VERIFICAÇÃO DE BANCO ---
   const onSubmit = async (data: LoginData) => {
+    if (isLoading) return;
     setIsLoading(true);
+    
     let emailFinal = data.identifier.trim();
     const apenasNumeros = data.identifier.replace(/\D/g, '');
 
     try {
-      // Se for CPF, busca o e-mail nas tabelas
+      // 1. Busca e-mail por CPF se necessário
       if (!data.identifier.includes('@') && apenasNumeros.length === 11) {
-        const [resMC, resAud, resOrg] = await Promise.all([
-          supabase.from('perfil_mc').select('email_vinculado').eq('cpf', apenasNumeros).maybeSingle(),
-          supabase.from('perfil_audiencia').select('email_vinculado').eq('cpf', apenasNumeros).maybeSingle(),
-          supabase.from('perfil_organizacao').select('email_vinculado').eq('cpf_responsavel', apenasNumeros).maybeSingle()
-        ]);
+        const { data: dbPerfil, error: cpfError } = await supabase
+          .from('perfis')
+          .select('email_vinculado')
+          .eq('cpf', apenasNumeros)
+          .maybeSingle();
 
-        const perfil = resMC.data || resAud.data || resOrg.data;
-        if (!perfil) throw new Error("CPF não encontrado no Street Pass.");
-        emailFinal = perfil.email_vinculado;
+        if (!dbPerfil) throw new Error("CPF não cadastrado no Street Pass.");
+        emailFinal = dbPerfil.email_vinculado;
       }
 
-      // Tenta o login no Auth
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      // 2. Login no Supabase Auth
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email: emailFinal,
         password: data.password,
       });
 
       if (authError) throw authError;
 
-      // --- VALIDAÇÃO CRÍTICA ---
-      // Após logar no Auth, checamos se o registro existe no banco de dados público
-      if (authData.user) {
-        const profile = await checkProfileExists(authData.user.id);
-        
-        if (!profile) {
-          // Se não existe no banco, desloga o cara na hora
-          await supabase.auth.signOut();
-          throw new Error("Usuário autenticado, mas perfil não encontrado no banco de dados.");
-        }
-      }
-
+      // O useEffect acima cuidará do redirecionamento assim que o Contexto atualizar
     } catch (error: any) {
       Alert.alert("Erro de Acesso", error.message);
       setIsLoading(false);
@@ -131,15 +93,21 @@ export default function LoginScreen() {
     if (text.includes('@')) return text.toLowerCase(); 
     const clean = text.replace(/\D/g, '');
     if (clean.length <= 11 && clean.length > 0) {
-      return clean.replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d)/, '$1.$2').replace(/(\d{3})(\d{1,2})/, '$1-$2');
+      return clean
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})/, '$1-$2');
     }
     return text;
   };
 
-  if (authLoading && !isNavigating) {
+  // Se o App está checando se você já está logado, mostramos apenas o loading
+  // Isso evita o flash da tela de login e o redirecionamento forçado para o cadastro
+  if (authLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center' }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#39FF14" />
+        <Text style={{ color: '#888', marginTop: 15 }}>Validando passaporte...</Text>
       </View>
     );
   }
@@ -158,13 +126,12 @@ export default function LoginScreen() {
           render={({ field: { onChange, value } }) => (
             <View style={styles.inputGroup}>
               <View style={[styles.inputContainer, errors.identifier && styles.inputError]}>
-                <Ionicons name="mail-outline" size={20} color="#888" />
+                <Ionicons name="person-outline" size={20} color="#888" />
                 <TextInput 
                   style={styles.input} 
                   placeholder="E-mail ou CPF" 
                   placeholderTextColor="#666"
                   autoCapitalize="none"
-                  keyboardType="email-address"
                   onChangeText={(text) => onChange(formatInput(text))}
                   value={value}
                 />
@@ -198,15 +165,19 @@ export default function LoginScreen() {
           )}
         />
 
-        <TouchableOpacity style={styles.buttonPrimary} onPress={handleSubmit(onSubmit)} disabled={isLoading || isNavigating}>
+        <TouchableOpacity 
+          style={styles.buttonPrimary} 
+          onPress={handleSubmit(onSubmit)} 
+          disabled={isLoading}
+        >
           {isLoading ? <ActivityIndicator color="#000" /> : <Text style={styles.buttonPrimaryText}>ENTRAR NA RODA</Text>}
         </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Novo na cena?</Text>
+        <Text style={styles.footerText}>Ainda não tem passaporte?</Text>
         <TouchableOpacity onPress={() => router.replace('/auth/register')}>
-          <Text style={styles.footerLink}> Criar passaporte</Text>
+          <Text style={styles.footerLink}> Criar conta</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -215,7 +186,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0D0D0D', paddingHorizontal: 25 },
-  header: { marginTop: 80, marginBottom: 40, alignItems: 'center' },
+  header: { marginTop: 100, marginBottom: 40, alignItems: 'center' },
   title: { fontSize: 38, fontWeight: '900', color: '#FFF', fontStyle: 'italic' },
   textNeon: { color: '#39FF14' },
   subtitle: { color: '#888', fontSize: 14, marginTop: 10 },

@@ -11,14 +11,18 @@ import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
 
+// IMPORTANTE: Verifique se o caminho do seu AuthContext está correto
 import { AuthProvider } from "../src/context/AuthContext";
 
 export { ErrorBoundary } from "expo-router";
 
+// Configurações iniciais
 export const unstable_settings = {
-  initialRouteName: "(tabs)",
+  // Se o usuário não estiver logado, ele será jogado para o (auth) pelo AuthLayout
+  initialRouteName: "(auth)", 
 };
 
+// Impede que o Splash suma antes da hora
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -41,7 +45,6 @@ export default function RootLayout() {
   }
 
   return (
-    // Envolvemos toda a navegação com o AuthProvider
     <AuthProvider>
       <RootLayoutNav />
     </AuthProvider>
@@ -53,20 +56,24 @@ function RootLayoutNav() {
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
-      <Stack screenOptions={{ headerShown: false }}>
-        {/* Rota principal (Tabs ou Onboarding) */}
-        <Stack.Screen name="(tabs)" />
+      <Stack 
+        screenOptions={{ 
+          headerShown: false,
+          // Garante que todas as transições sejam padrão (da direita para esquerda)
+          animation: 'default', 
+        }}
+      >
+        
+        {/* Grupo de Autenticação (Onboarding/Login/Register) */}
+        <Stack.Screen name="(auth)" />
 
-        {/* Rotas de Autenticação */}
-        <Stack.Screen name="auth/login" options={{ title: "Login" }} />
-        <Stack.Screen name="auth/register" options={{ title: "Cadastro" }} />
+        {/* Grupo Protegido (Audience, MC, Organizer) */}
+        <Stack.Screen name="(protected)" />
 
-        {/* Rotas de Destino Pós-Login */}
-        <Stack.Screen name="app\(protected)\mc\(tabs)\index.tsx" />
-        <Stack.Screen name="app\(protected)\audience\(tabs)\index.tsx" />
-        <Stack.Screen name="app\(protected)\organizer\(tabs)\index.tsx" />
-
-        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
+        {/* REMOVIDO: <Stack.Screen name="modal" ... />
+           Agora, qualquer tela nova que você criar entrará no fluxo normal,
+           ocupando 100% da visão do usuário.
+        */}
       </Stack>
     </ThemeProvider>
   );

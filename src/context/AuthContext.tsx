@@ -1,12 +1,18 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase'; 
-import { Session, User } from '@supabase/supabase-js';
+import { User } from '@supabase/supabase-js';
+
+interface Perfil {
+  id: string;
+  nivel_acesso: number;
+  nome_completo: string;
+}
 
 interface AuthContextData {
   user: User | null;
-  session: Session | null;
+  perfil: Perfil | null;
   loading: boolean;
-  isLoggingOut: boolean; // Adicionado
+  isLoggingOut: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -14,60 +20,63 @@ export const AuthContext = createContext<AuthContextData>({} as AuthContextData)
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isLoggingOut, setIsLoggingOut] = useState(false); // Novo estado
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [loading, setLoading] = useState(true); // Começa travado
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    // 1. Busca a sessão inicial
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    };
-
-    initializeAuth();
-
-    // 2. Escuta mudanças (Login/Logout)
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-      
-      // Se o evento for de SIGN_OUT, garantimos que o isLoggingOut resete
-      if (_event === 'SIGNED_OUT') {
-        setIsLoggingOut(false);
-      }
-    });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  const signOut = async () => {
+  const fetchPerfil = async (userId: string) => {
     try {
-      setIsLoggingOut(true); // Ativa o Modal de "Saindo da Roda"
-      
-      // Dá tempo do usuário ver a rima/animação de despedida
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
-
-    } catch (error) {
-      console.error("Erro ao deslogar:", error);
-    } finally {
-      // Importante: Resetamos aqui para garantir que o Modal feche
-      setIsLoggingOut(false);
-      setUser(null);
-      setSession(null);
+      const { data } = await supabase
+        .from('perfis')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      setPerfil(data);
+    } catch (e) {
+      setPerfil(null);
     }
   };
 
+  useEffect(() => {
+    // 1. Tenta recuperar sessão salva ao abrir o app
+    const checkSession = async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        setUser(session.user);
+        await fetchPerfil(session.user.id);
+      }
+      setLoading(false); // Só libera após checar o banco
+    };
+
+    checkSession();
+
+    // 2. Escuta mudanças de estado (Login/Logout)
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) await fetchPerfil(currentUser.id);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setPerfil(null);
+      }
+      setLoading(false);
+    });
+
+    return () => authListener.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    setIsLoggingOut(true);
+    await new Promise(res => setTimeout(res, 1500)); // Delay para o modal
+    await supabase.auth.signOut();
+    setIsLoggingOut(false);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, isLoggingOut, signOut }}>
+    <AuthContext.Provider value={{ user, perfil, loading, isLoggingOut, signOut }}>
       {children}
     </AuthContext.Provider>
   );

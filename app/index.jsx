@@ -1,17 +1,18 @@
 import React, { useContext } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Redirect } from 'expo-router';
+
+// Caminho para o seu AuthContext
 import { AuthContext } from '../src/context/AuthContext';
 
-// Importe o componente de Onboarding. 
-// Certifique-se de que o arquivo onboarding.tsx exporta "default function..."
+// Sua tela de boas-vindas
 import OnboardingScreen from './onboarding'; 
 
 export default function Index() {
-  const { isAuthenticated, user, isLoading } = useContext(AuthContext);
+  const { user, perfil, loading } = useContext(AuthContext);
 
-  // 1. Hook de carregamento inicial
-  if (isLoading) {
+  // 1. Enquanto verifica a sessão no banco de dados
+  if (loading) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#39FF14" />
@@ -19,18 +20,21 @@ export default function Index() {
     );
   }
 
-  // 2. Se já estiver logado, o Redirect resolve a navegação sem conflito de Hooks
-  if (isAuthenticated && user) {
-    const target = user.type === 'mc' 
-      ? '/mc' 
-      : user.type === 'organizer' 
-      ? '/organizer' 
-      : '/audience';
+  // 2. Redirecionamento após o Login
+  if (user && perfil) {
+    // Definimos o destino inicial como o Perfil (conforme seu pedido)
+    let target = "/audience/index"; 
+
+    if (perfil.nivel_acesso === 2) {
+      target = "/mc/index"; 
+    } else if (perfil.nivel_acesso === 3) {
+      target = "/organizer/index";
+    }
       
     return <Redirect href={target} />;
   }
 
-  // 3. Se não estiver logado, renderiza o componente de Onboarding
+  // 3. Se não estiver logado, vai para o Onboarding
   return <OnboardingScreen />;
 }
 
