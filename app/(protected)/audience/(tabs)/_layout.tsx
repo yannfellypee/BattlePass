@@ -24,7 +24,7 @@ export default function TabLayout() {
     >
       {/* 1. Feed */}
       <Tabs.Screen
-        name="index"
+        name="feed"
         options={{
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "home" : "home-outline"} size={28} color={color} />
@@ -73,7 +73,7 @@ export default function TabLayout() {
 
       {/* Telas escondidas do menu inferior, mas que continuam existindo */}
       <Tabs.Screen name="ranking" options={{ href: null }} />
-      
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="notifications" options={{ href: null }} />
     </Tabs>
   );
