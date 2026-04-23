@@ -2,11 +2,8 @@ import React, { useContext } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Redirect } from 'expo-router';
 
-// Caminho para o seu AuthContext
+// Caminho para o seu AuthContext (Mantenha o seu caminho original)
 import { AuthContext } from '../src/context/AuthContext';
-
-// Sua tela de boas-vindas
-import OnboardingScreen from './onboarding'; 
 
 export default function Index() {
   const { user, perfil, loading } = useContext(AuthContext);
@@ -20,22 +17,16 @@ export default function Index() {
     );
   }
 
-  // 2. Redirecionamento após o Login
+  // 2. Redirecionamento na NOVA ARQUITETURA (Perfil Universal)
   if (user && perfil) {
-    // Definimos o destino inicial como o Perfil (conforme seu pedido)
-    let target = "/audience/index"; 
-
-    if (perfil.nivel_acesso === 2) {
-      target = "/mc/index"; 
-    } else if (perfil.nivel_acesso === 3) {
-      target = "/organizer/index";
-    }
-      
-    return <Redirect href={target} />;
+    // Independentemente se é Público, MC ou Organizador,
+    // o "esqueleto" é o mesmo. O app se molda lá dentro.
+    return <Redirect href="/(tabs)/feed" />;
   }
 
-  // 3. Se não estiver logado, vai para o Onboarding
-  return <OnboardingScreen />;
+  // 3. Se não estiver logado, vai para a entrada do app.
+  // Nota: Se você tiver uma rota de onboarding, pode trocar para href="/onboarding"
+  return <Redirect href="/auth/login" />;
 }
 
 const styles = StyleSheet.create({

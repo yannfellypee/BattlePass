@@ -76,7 +76,7 @@ export default function RegisterScreen() {
       if (profileError) throw profileError;
 
       setShowSuccess(true);
-      setTimeout(() => router.replace('/auth/login'), 4000);
+      setTimeout(() => router.replace('/auth/chooseRole'), 4000);
 
     } catch (error: any) {
       Alert.alert("Erro no Cadastro", error.message);

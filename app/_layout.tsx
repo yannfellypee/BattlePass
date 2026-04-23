@@ -11,18 +11,18 @@ import "react-native-reanimated";
 
 import { useColorScheme } from "@/components/useColorScheme";
 
-// IMPORTANTE: Verifique se o caminho do seu AuthContext está correto
+// Verifique se o caminho para o seu AuthContext está correto no projeto
 import { AuthProvider } from "../src/context/AuthContext";
 
 export { ErrorBoundary } from "expo-router";
 
-// Configurações iniciais
+// Configurações de navegação do BattlePass
 export const unstable_settings = {
-  // Se o usuário não estiver logado, ele será jogado para o (auth) pelo AuthLayout
-  initialRouteName: "(auth)", 
+  // Apontamos para o caminho exato do ficheiro dentro da pasta auth
+  initialRouteName: "auth/login", 
 };
 
-// Impede que o Splash suma antes da hora
+// Mantém o Splash Screen visível até as fontes e recursos carregarem
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
@@ -59,21 +59,22 @@ function RootLayoutNav() {
       <Stack 
         screenOptions={{ 
           headerShown: false,
-          // Garante que todas as transições sejam padrão (da direita para esquerda)
           animation: 'default', 
         }}
       >
         
-        {/* Grupo de Autenticação (Onboarding/Login/Register) */}
-        <Stack.Screen name="(auth)" />
+        {/* Rota para a pasta auth (contém login e registo) */}
+        <Stack.Screen name="auth" />
 
-        {/* Grupo Protegido (Audience, MC, Organizer) */}
+        {/* Grupo de ecrãs protegidos (Feed, Passaporte, etc.) */}
         <Stack.Screen name="(protected)" />
 
-        {/* REMOVIDO: <Stack.Screen name="modal" ... />
-           Agora, qualquer tela nova que você criar entrará no fluxo normal,
-           ocupando 100% da visão do usuário.
-        */}
+        {/* Ecrãs organizados por abas */}
+        <Stack.Screen name="(tabs)" />
+        
+        {/* Rota dinâmica para detalhes de cada batalha */}
+        <Stack.Screen name="battle/[id]" />
+
       </Stack>
     </ThemeProvider>
   );

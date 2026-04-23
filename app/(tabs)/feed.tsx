@@ -3,20 +3,35 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-nati
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-// Dados fake para ilustrar a tela
-const RECENT_BATTLES = [
-  { id: '1', name: 'Batalha da Matriz', city: 'São Paulo', winner: 'MC Kaos', date: 'Ontem' },
-  { id: '2', name: 'Batalha do Tanque', city: 'Rio de Janeiro', winner: 'MC Xamã', date: 'Sexta' },
+// ==========================================
+// 🧠 SESSÃO DO USUÁRIO (Simulação do AuthContext)
+// Mude essas variáveis para testar as lentes!
+// roles possíveis: 'audiencia', 'competidor', 'organizador'
+// ==========================================
+const SESSAO_ATUAL = {
+  nome: 'Yann',
+  role: 'audiencia', // ⬅️ Mude para 'competidor' ou 'organizador'
+  
+  // Privilégios Temporários (Jurado)
+  temConviteJurado: true, // ⬅️ Mude para false para esconder o convite
+  isJuradoAtivoHoje: false, // ⬅️ Mude para true para ver o painel de notas
+};
+
+// ==========================================
+// DADOS MOCKADOS (O que vem do banco de dados)
+// ==========================================
+const PROXIMAS_BATALHAS = [
+  { id: '1', nome: 'Batalha da Matriz', local: 'Praça Central', data: 'Hoje, 20h', status: 'Inscrições Abertas' },
+  { id: '2', nome: 'Slam Resistência', local: 'Mirante', data: 'Sábado, 19h', status: 'Buscando Jurados' },
 ];
 
-const UPCOMING_BATTLES = [
-  { id: '3', name: 'Batalha da Aldeia', city: 'Barueri', date: 'Hoje, 20h', type: 'Especial' },
-  { id: '4', name: 'Batalha do Museu', city: 'Brasília', date: 'Amanhã, 19h', type: 'Regional' },
+const ULTIMOS_RESULTADOS = [
+  { id: '3', nome: 'Batalha do Tanque', vencedor: 'MC Kaos', data: 'Sexta passada' },
 ];
 
-const TOP_MCS = [
-  { id: '1', name: 'MC Kaos', wins: 14, tag: 'Lenda' },
-  { id: '2', name: 'MC Jhon', wins: 10, tag: 'Respeitado' },
+const RANKING = [
+  { id: '1', nome: 'MC Kaos', vitorias: 14, tag: 'Lenda' },
+  { id: '2', nome: 'Poeta Jhon', vitorias: 10, tag: 'Slammer' },
 ];
 
 export default function HomeFeedScreen() {
@@ -24,9 +39,9 @@ export default function HomeFeedScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header Customizado */}
+      {/* HEADER UNIVERSAL */}
       <View style={styles.header}>
-        <Text style={styles.title}>BATTLE <Text style={styles.textNeon}>PASS</Text></Text>
+        <Text style={styles.title}>STREET <Text style={styles.textNeon}>PASS</Text></Text>
         <TouchableOpacity onPress={() => router.push('/notifications')}>
           <Ionicons name="notifications-outline" size={28} color="#FFF" />
         </TouchableOpacity>
@@ -34,193 +49,210 @@ export default function HomeFeedScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
-        {/* Próximas Batalhas */}
-        <Text style={styles.sectionTitle}>ROLANDO EM BREVE</Text>
+        {/* ========================================== */}
+        {/* 🚀 LENTE 1: O JURADO (Privilégio Temporário) */}
+        {/* ========================================== */}
+        
+        {/* Cenário A: O organizador convidou ele para ser jurado */}
+        {SESSAO_ATUAL.temConviteJurado && !SESSAO_ATUAL.isJuradoAtivoHoje && (
+          <View style={styles.alertPanel}>
+            <View style={styles.alertHeader}>
+              <Ionicons name="mail-unread" size={20} color="#39FF14" />
+              <Text style={styles.alertTitle}>CONVITE OFICIAL</Text>
+            </View>
+            <Text style={styles.alertText}>Você foi convocado para ser jurado na <Text style={{fontWeight: 'bold', color: '#FFF'}}>Batalha da Matriz</Text> hoje às 20h.</Text>
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity style={[styles.btnAction, styles.btnAccept]}>
+                <Text style={styles.btnAcceptText}>ACEITAR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.btnAction, styles.btnDecline]}>
+                <Text style={styles.btnDeclineText}>RECUSAR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Cenário B: Ele aceitou e o evento é HOJE (Painel de Notas liberado) */}
+        {SESSAO_ATUAL.isJuradoAtivoHoje && (
+          <View style={styles.juradoPanel}>
+            <View style={styles.juradoHeader}>
+              <Ionicons name="star" size={20} color="#000" />
+              <Text style={styles.juradoTitle}>MESA DO JÚRI</Text>
+            </View>
+            <Text style={styles.juradoText}>O evento começou! Acesse o painel para votar nos rounds.</Text>
+            <TouchableOpacity style={styles.btnJurado}>
+              <Text style={styles.btnJuradoText}>ABRIR PAINEL DE NOTAS</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ========================================== */}
+        {/* 🚀 LENTE 2: O ORGANIZADOR (O Dono da Roda) */}
+        {/* ========================================== */}
+        {SESSAO_ATUAL.role === 'organizador' && (
+          <View style={styles.organizadorPanel}>
+            <View style={styles.orgHeader}>
+              <Text style={styles.panelTag}>MEU EVENTO</Text>
+              <TouchableOpacity><Ionicons name="settings-outline" size={20} color="#888" /></TouchableOpacity>
+            </View>
+            <Text style={styles.orgEventName}>Batalha da Matriz</Text>
+            
+            <View style={styles.orgStats}>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>16</Text>
+                <Text style={styles.statLabel}>MCs Inscritos</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>3/3</Text>
+                <Text style={styles.statLabel}>Jurados</Text>
+              </View>
+              <View style={styles.statBox}>
+                <Text style={styles.statNumber}>142</Text>
+                <Text style={styles.statLabel}>Confirmados</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity style={styles.btnOrg}>
+              <Text style={styles.btnOrgText}>GERENCIAR CHAVEAMENTO</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ========================================== */}
+        {/* 🌍 FEED UNIVERSAL (Descoberta) */}
+        {/* ========================================== */}
+
+        <Text style={styles.sectionTitle}>ROLANDO NA CENA</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
-          {UPCOMING_BATTLES.map((battle) => (
-            <TouchableOpacity key={battle.id} style={styles.cardHighlight}>
-              <View style={styles.tagNeon}><Text style={styles.tagText}>{battle.type}</Text></View>
-              <Text style={styles.cardTitle}>{battle.name}</Text>
-              <Text style={styles.cardSubtitle}><Ionicons name="location" size={12} color="#888" /> {battle.city}</Text>
-              <Text style={styles.cardDate}><Ionicons name="time" size={12} color="#39FF14" /> {battle.date}</Text>
+          {PROXIMAS_BATALHAS.map((batalha) => (
+            <TouchableOpacity key={batalha.id} style={styles.cardEvento}>
+              <View style={styles.tagNeon}><Text style={styles.tagText}>{batalha.status}</Text></View>
+              <Text style={styles.cardTitle}>{batalha.nome}</Text>
+              <Text style={styles.cardInfo}><Ionicons name="location" size={12} /> {batalha.local}</Text>
+              <Text style={styles.cardInfo}><Ionicons name="time" size={12} /> {batalha.data}</Text>
+              
+              {/* LENTES DE AÇÃO DENTRO DO CARD (O que cada um pode fazer no evento) */}
+              {SESSAO_ATUAL.role === 'competidor' && batalha.status === 'Inscrições Abertas' && (
+                 <TouchableOpacity style={styles.btnCardCompetidor}>
+                   <Text style={styles.btnCardCompetidorText}>INSCREVER-SE NA CHAVE</Text>
+                 </TouchableOpacity>
+              )}
+
+              {SESSAO_ATUAL.role === 'audiencia' && (
+                 <TouchableOpacity style={styles.btnCardAudiencia}>
+                   <Text style={styles.btnCardAudienciaText}>VOU COLAR</Text>
+                 </TouchableOpacity>
+              )}
+
+              {batalha.status === 'Buscando Jurados' && SESSAO_ATUAL.role !== 'organizador' && (
+                 <TouchableOpacity style={styles.btnCardCandidato}>
+                   <Text style={styles.btnCardCandidatoText}>CANDIDATAR A JURADO</Text>
+                 </TouchableOpacity>
+              )}
+
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Batalhas Recentes */}
-        <Text style={styles.sectionTitle}>ÚLTIMOS CONFRONTOS</Text>
-        {RECENT_BATTLES.map((battle) => (
-          <TouchableOpacity key={battle.id} style={styles.cardDefault}>
+        {/* RESULTADOS E RANKING (Todos veem) */}
+        <Text style={styles.sectionTitle}>ÚLTIMOS CAMPEÕES</Text>
+        {ULTIMOS_RESULTADOS.map((resultado) => (
+          <View key={resultado.id} style={styles.cardResultado}>
             <View>
-              <Text style={styles.cardTitle}>{battle.name}</Text>
-              <Text style={styles.cardSubtitle}>{battle.city} • {battle.date}</Text>
+              <Text style={styles.cardTitle}>{resultado.nome}</Text>
+              <Text style={styles.cardInfo}>{resultado.data}</Text>
             </View>
-            <View style={styles.winnerBadge}>
+            <View style={styles.badgeVencedor}>
               <Ionicons name="trophy" size={14} color="#000" />
-              <Text style={styles.winnerText}>{battle.winner}</Text>
+              <Text style={styles.vencedorText}>{resultado.vencedor}</Text>
             </View>
-          </TouchableOpacity>
+          </View>
         ))}
 
-        {/* Ranking Destaque */}
-        <Text style={styles.sectionTitle}>RANKING DESTAQUE</Text>
+        <Text style={styles.sectionTitle}>RANKING DA CIDADE</Text>
         <View style={styles.rankingContainer}>
-          {TOP_MCS.map((mc, index) => (
-            <View key={mc.id} style={styles.rankingRow}>
-              <Text style={styles.rankingPosition}>{index + 1}</Text>
-              <View style={styles.mcInfo}>
-                <Text style={styles.mcName}>{mc.name}</Text>
-                <Text style={styles.mcTag}>{mc.tag}</Text>
+          {RANKING.map((atleta, index) => (
+            <View key={atleta.id} style={styles.rankingRow}>
+              <Text style={styles.rankingPos}>{index + 1}</Text>
+              <View style={{flex: 1}}>
+                <Text style={styles.atletaNome}>{atleta.nome}</Text>
+                <Text style={styles.atletaTag}>{atleta.tag}</Text>
               </View>
-              <Text style={styles.mcWins}>{mc.wins} vitórias</Text>
+              <Text style={styles.atletaVitorias}>{atleta.vitorias} vitórias</Text>
             </View>
           ))}
         </View>
         
-        <View style={{ height: 20 }} />
+        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0D0D0D', 
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#222',
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#FFF',
-    fontStyle: 'italic',
-  },
-  textNeon: {
-    color: '#39FF14', 
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  sectionTitle: {
-    color: '#888',
-    fontSize: 14,
-    fontWeight: 'bold',
-    letterSpacing: 1.5,
-    marginBottom: 15,
-    marginTop: 10,
-  },
-  horizontalScroll: {
-    marginBottom: 25,
-  },
-  cardHighlight: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 15,
-    marginRight: 15,
-    width: 220,
-    borderWidth: 1,
-    borderColor: '#39FF14',
-    shadowColor: '#39FF14',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-  },
-  tagNeon: {
-    backgroundColor: '#39FF14',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginBottom: 10,
-  },
-  tagText: {
-    color: '#000',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
-  },
-  cardTitle: {
-    color: '#FFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  cardSubtitle: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 10,
-  },
-  cardDate: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  cardDefault: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#222',
-  },
-  winnerBadge: {
-    backgroundColor: '#39FF14',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  winnerText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 12,
-    marginLeft: 5,
-  },
-  rankingContainer: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#222',
-  },
-  rankingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  rankingPosition: {
-    color: '#39FF14',
-    fontSize: 20,
-    fontWeight: '900',
-    width: 30,
-  },
-  mcInfo: {
-    flex: 1,
-  },
-  mcName: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  mcTag: {
-    color: '#888',
-    fontSize: 12,
-  },
-  mcWins: {
-    color: '#FFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
+  container: { flex: 1, backgroundColor: '#0D0D0D' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, paddingTop: 50, borderBottomWidth: 1, borderColor: '#222' },
+  title: { fontSize: 22, fontWeight: '900', color: '#FFF', fontStyle: 'italic' },
+  textNeon: { color: '#39FF14' },
+  scrollContent: { padding: 20 },
+  sectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.5, marginBottom: 15, marginTop: 10 },
+
+  // --- PAINEL: CONVITE DE JURADO ---
+  alertPanel: { backgroundColor: '#1A1A1A', borderColor: '#39FF14', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
+  alertHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  alertTitle: { color: '#39FF14', fontSize: 14, fontWeight: 'bold', marginLeft: 8 },
+  alertText: { color: '#CCC', fontSize: 14, marginBottom: 15, lineHeight: 20 },
+  actionButtonsRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  btnAction: { flex: 0.48, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  btnAccept: { backgroundColor: '#39FF14' },
+  btnAcceptText: { color: '#000', fontWeight: 'bold' },
+  btnDecline: { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' },
+  btnDeclineText: { color: '#FFF', fontWeight: 'bold' },
+
+  // --- PAINEL: MESA DO JÚRI (ATIVO) ---
+  juradoPanel: { backgroundColor: '#39FF14', borderRadius: 12, padding: 15, marginBottom: 20 },
+  juradoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
+  juradoTitle: { color: '#000', fontSize: 16, fontWeight: '900', marginLeft: 8 },
+  juradoText: { color: '#222', fontSize: 13, marginBottom: 15 },
+  btnJurado: { backgroundColor: '#000', paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  btnJuradoText: { color: '#39FF14', fontWeight: 'bold' },
+
+  // --- PAINEL: ORGANIZADOR ---
+  organizadorPanel: { backgroundColor: '#1A1A1A', borderWidth: 1, borderColor: '#333', borderRadius: 12, padding: 15, marginBottom: 20 },
+  orgHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 },
+  panelTag: { color: '#39FF14', fontSize: 10, fontWeight: 'bold', letterSpacing: 1 },
+  orgEventName: { color: '#FFF', fontSize: 20, fontWeight: 'bold', marginBottom: 15 },
+  orgStats: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15, backgroundColor: '#0D0D0D', padding: 10, borderRadius: 8 },
+  statBox: { alignItems: 'center' },
+  statNumber: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+  statLabel: { color: '#888', fontSize: 10, marginTop: 2 },
+  btnOrg: { backgroundColor: '#333', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#555' },
+  btnOrgText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+
+  // --- CARDS DO FEED (UNIVERSAL) ---
+  horizontalScroll: { marginBottom: 20 },
+  cardEvento: { backgroundColor: '#1A1A1A', borderRadius: 12, padding: 15, marginRight: 15, width: 260, borderWidth: 1, borderColor: '#222' },
+  tagNeon: { backgroundColor: '#39FF1420', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginBottom: 10, borderWidth: 1, borderColor: '#39FF14' },
+  tagText: { color: '#39FF14', fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase' },
+  cardTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
+  cardInfo: { color: '#888', fontSize: 13, marginBottom: 4 },
+  
+  // Botões de Ação dentro do Card
+  btnCardCompetidor: { marginTop: 15, backgroundColor: '#39FF14', paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
+  btnCardCompetidorText: { color: '#000', fontWeight: 'bold', fontSize: 12 },
+  btnCardAudiencia: { marginTop: 15, borderWidth: 1, borderColor: '#333', paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
+  btnCardAudienciaText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
+  btnCardCandidato: { marginTop: 10, backgroundColor: '#333', paddingVertical: 8, borderRadius: 6, alignItems: 'center' },
+  btnCardCandidatoText: { color: '#FFF', fontWeight: 'bold', fontSize: 11 },
+
+  cardResultado: { backgroundColor: '#1A1A1A', borderRadius: 12, padding: 15, marginBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#222' },
+  badgeVencedor: { backgroundColor: '#39FF14', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  vencedorText: { color: '#000', fontWeight: 'bold', fontSize: 12, marginLeft: 5 },
+
+  rankingContainer: { backgroundColor: '#1A1A1A', borderRadius: 12, padding: 15, borderWidth: 1, borderColor: '#222' },
+  rankingRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
+  rankingPos: { color: '#39FF14', fontSize: 20, fontWeight: '900', width: 30 },
+  atletaNome: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
+  atletaTag: { color: '#888', fontSize: 12 },
+  atletaVitorias: { color: '#FFF', fontSize: 14, fontWeight: 'bold' },
 });
