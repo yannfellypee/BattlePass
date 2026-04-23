@@ -4,21 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 // ==========================================
-// 🧠 SESSÃO DO USUÁRIO (Simulação do AuthContext)
-// Mude essas variáveis para testar as lentes!
-// roles possíveis: 'audiencia', 'competidor', 'organizador'
+// 🧠 SESSÃO DO USUÁRIO (Simulação)
+// Agora tudo é decidido EXCLUSIVAMENTE pelo papel escolhido no chooseRole!
 // ==========================================
 const SESSAO_ATUAL = {
   nome: 'Yann',
-  role: 'audiencia', // ⬅️ Mude para 'competidor' ou 'organizador'
-  
-  // Privilégios Temporários (Jurado)
-  temConviteJurado: true, // ⬅️ Mude para false para esconder o convite
-  isJuradoAtivoHoje: false, // ⬅️ Mude para true para ver o painel de notas
+  role: 'jurado', // ⬅️ TESTE AQUI: 'audiencia', 'mc', 'poeta', 'organizador', 'jurado'
 };
 
 // ==========================================
-// DADOS MOCKADOS (O que vem do banco de dados)
+// DADOS MOCKADOS
 // ==========================================
 const PROXIMAS_BATALHAS = [
   { id: '1', nome: 'Batalha da Matriz', local: 'Praça Central', data: 'Hoje, 20h', status: 'Inscrições Abertas' },
@@ -37,6 +32,9 @@ const RANKING = [
 export default function HomeFeedScreen() {
   const router = useRouter();
 
+  // Variável inteligente para agrupar quem rima/recita
+  const isArtista = SESSAO_ATUAL.role === 'mc' || SESSAO_ATUAL.role === 'poeta';
+
   return (
     <View style={styles.container}>
       {/* HEADER UNIVERSAL */}
@@ -50,36 +48,15 @@ export default function HomeFeedScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         
         {/* ========================================== */}
-        {/* 🚀 LENTE 1: O JURADO (Privilégio Temporário) */}
+        {/* 🚀 LENTE 1: O JURADO */}
         {/* ========================================== */}
-        
-        {/* Cenário A: O organizador convidou ele para ser jurado */}
-        {SESSAO_ATUAL.temConviteJurado && !SESSAO_ATUAL.isJuradoAtivoHoje && (
-          <View style={styles.alertPanel}>
-            <View style={styles.alertHeader}>
-              <Ionicons name="mail-unread" size={20} color="#39FF14" />
-              <Text style={styles.alertTitle}>CONVITE OFICIAL</Text>
-            </View>
-            <Text style={styles.alertText}>Você foi convocado para ser jurado na <Text style={{fontWeight: 'bold', color: '#FFF'}}>Batalha da Matriz</Text> hoje às 20h.</Text>
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity style={[styles.btnAction, styles.btnAccept]}>
-                <Text style={styles.btnAcceptText}>ACEITAR</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btnAction, styles.btnDecline]}>
-                <Text style={styles.btnDeclineText}>RECUSAR</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Cenário B: Ele aceitou e o evento é HOJE (Painel de Notas liberado) */}
-        {SESSAO_ATUAL.isJuradoAtivoHoje && (
+        {SESSAO_ATUAL.role === 'jurado' && (
           <View style={styles.juradoPanel}>
             <View style={styles.juradoHeader}>
               <Ionicons name="star" size={20} color="#000" />
               <Text style={styles.juradoTitle}>MESA DO JÚRI</Text>
             </View>
-            <Text style={styles.juradoText}>O evento começou! Acesse o painel para votar nos rounds.</Text>
+            <Text style={styles.juradoText}>Você está escalado para a Batalha da Matriz. Acesse o painel para votar nos rounds de hoje.</Text>
             <TouchableOpacity style={styles.btnJurado}>
               <Text style={styles.btnJuradoText}>ABRIR PAINEL DE NOTAS</Text>
             </TouchableOpacity>
@@ -87,7 +64,7 @@ export default function HomeFeedScreen() {
         )}
 
         {/* ========================================== */}
-        {/* 🚀 LENTE 2: O ORGANIZADOR (O Dono da Roda) */}
+        {/* 🚀 LENTE 2: O ORGANIZADOR */}
         {/* ========================================== */}
         {SESSAO_ATUAL.role === 'organizador' && (
           <View style={styles.organizadorPanel}>
@@ -131,19 +108,23 @@ export default function HomeFeedScreen() {
               <Text style={styles.cardInfo}><Ionicons name="location" size={12} /> {batalha.local}</Text>
               <Text style={styles.cardInfo}><Ionicons name="time" size={12} /> {batalha.data}</Text>
               
-              {/* LENTES DE AÇÃO DENTRO DO CARD (O que cada um pode fazer no evento) */}
-              {SESSAO_ATUAL.role === 'competidor' && batalha.status === 'Inscrições Abertas' && (
+              {/* === LENTES DE AÇÃO DO CARD === */}
+              
+              {/* Artista (MC/Poeta): Inscrever-se na batalha */}
+              {isArtista && batalha.status === 'Inscrições Abertas' && (
                  <TouchableOpacity style={styles.btnCardCompetidor}>
                    <Text style={styles.btnCardCompetidorText}>INSCREVER-SE NA CHAVE</Text>
                  </TouchableOpacity>
               )}
 
+              {/* Audiência: Dar o RSVP (Vou colar) */}
               {SESSAO_ATUAL.role === 'audiencia' && (
                  <TouchableOpacity style={styles.btnCardAudiencia}>
                    <Text style={styles.btnCardAudienciaText}>VOU COLAR</Text>
                  </TouchableOpacity>
               )}
 
+              {/* Candidatura a Jurado (Qualquer um que não seja o organizador pode tentar a vaga, incluindo a audiência e artistas) */}
               {batalha.status === 'Buscando Jurados' && SESSAO_ATUAL.role !== 'organizador' && (
                  <TouchableOpacity style={styles.btnCardCandidato}>
                    <Text style={styles.btnCardCandidatoText}>CANDIDATAR A JURADO</Text>
@@ -154,7 +135,7 @@ export default function HomeFeedScreen() {
           ))}
         </ScrollView>
 
-        {/* RESULTADOS E RANKING (Todos veem) */}
+        {/* RESULTADOS E RANKING */}
         <Text style={styles.sectionTitle}>ÚLTIMOS CAMPEÕES</Text>
         {ULTIMOS_RESULTADOS.map((resultado) => (
           <View key={resultado.id} style={styles.cardResultado}>
@@ -197,19 +178,7 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 20 },
   sectionTitle: { color: '#888', fontSize: 12, fontWeight: 'bold', letterSpacing: 1.5, marginBottom: 15, marginTop: 10 },
 
-  // --- PAINEL: CONVITE DE JURADO ---
-  alertPanel: { backgroundColor: '#1A1A1A', borderColor: '#39FF14', borderWidth: 1, borderRadius: 12, padding: 15, marginBottom: 20 },
-  alertHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  alertTitle: { color: '#39FF14', fontSize: 14, fontWeight: 'bold', marginLeft: 8 },
-  alertText: { color: '#CCC', fontSize: 14, marginBottom: 15, lineHeight: 20 },
-  actionButtonsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  btnAction: { flex: 0.48, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
-  btnAccept: { backgroundColor: '#39FF14' },
-  btnAcceptText: { color: '#000', fontWeight: 'bold' },
-  btnDecline: { backgroundColor: '#333', borderWidth: 1, borderColor: '#555' },
-  btnDeclineText: { color: '#FFF', fontWeight: 'bold' },
-
-  // --- PAINEL: MESA DO JÚRI (ATIVO) ---
+  // --- PAINEL: MESA DO JÚRI ---
   juradoPanel: { backgroundColor: '#39FF14', borderRadius: 12, padding: 15, marginBottom: 20 },
   juradoHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 5 },
   juradoTitle: { color: '#000', fontSize: 16, fontWeight: '900', marginLeft: 8 },
@@ -229,7 +198,7 @@ const styles = StyleSheet.create({
   btnOrg: { backgroundColor: '#333', paddingVertical: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#555' },
   btnOrgText: { color: '#FFF', fontWeight: 'bold', fontSize: 12 },
 
-  // --- CARDS DO FEED (UNIVERSAL) ---
+  // --- CARDS DO FEED ---
   horizontalScroll: { marginBottom: 20 },
   cardEvento: { backgroundColor: '#1A1A1A', borderRadius: 12, padding: 15, marginRight: 15, width: 260, borderWidth: 1, borderColor: '#222' },
   tagNeon: { backgroundColor: '#39FF1420', alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginBottom: 10, borderWidth: 1, borderColor: '#39FF14' },
@@ -237,7 +206,6 @@ const styles = StyleSheet.create({
   cardTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold', marginBottom: 8 },
   cardInfo: { color: '#888', fontSize: 13, marginBottom: 4 },
   
-  // Botões de Ação dentro do Card
   btnCardCompetidor: { marginTop: 15, backgroundColor: '#39FF14', paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
   btnCardCompetidorText: { color: '#000', fontWeight: 'bold', fontSize: 12 },
   btnCardAudiencia: { marginTop: 15, borderWidth: 1, borderColor: '#333', paddingVertical: 10, borderRadius: 6, alignItems: 'center' },
